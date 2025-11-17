@@ -10,6 +10,7 @@ exports.handler = async function (event, context) {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: cors, body: '' };
   }
+
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
@@ -18,81 +19,54 @@ exports.handler = async function (event, context) {
     };
   }
 
-  // Utilidad para fabricar una respuesta "bonita" estándar
-  const makeCardResponse = (card) => {
-    const safe = {
-      myth: card.myth || '',
-      isTrue: !!card.isTrue,
-      explanation_simple: card.explanation_simple || '',
-      explanation_expert: card.explanation_expert || '',
-      evidenceLevel: card.evidenceLevel || 'Baja',
-      sources: Array.isArray(card.sources) ? card.sources : [],
-      category: card.category || '',
-      relatedMyths: Array.isArray(card.relatedMyths) ? card.relatedMyths : []
-    };
-    const text = JSON.stringify(safe);
-    const result = {
-      candidates: [
-        {
-          content: {
-            parts: [{ text }]
-          }
-        }
-      ]
-    };
+  // ---------- RECIPE FALLBACKS ----------
+  const makeFallbackRecipe = (title, simpleMessage, warnings) => {
     return {
-      statusCode: 200,
-      headers: {
-        ...cors,
-        'Content-Type': 'application/json',
-        'x-mmx-func-version': 'v10-all-safe-2025-11-17'
-      },
-      body: JSON.stringify(result)
+      title: title || 'Receta no disponible',
+      shortDescription: simpleMessage || 'En este momento Chef-Bot no puede generar la receta con IA.',
+      prepTimeMinutes: 0,
+      cookTimeMinutes: 0,
+      difficulty: 'Fácil',
+      steps: [
+        'Prepara una comida sencilla utilizando los ingredientes que ya tienes a mano.',
+        'Cuando la configuración del servidor esté corregida, vuelve a intentar generar una receta con IA.'
+      ],
+      tips: [],
+      warnings: Array.isArray(warnings) && warnings.length
+        ? warnings
+        : ['Este mensaje es solo informativo: no contiene instrucciones culinarias detalladas.']
     };
   };
 
   try {
     // ---------- INPUT ----------
-    let parsedBody;
-    try {
-      parsedBody = JSON.parse(event.body || '{}');
-    } catch {
+    const parsedBody = JSON.parse(event.body || '{}');
+    const recipeRequest = parsedBody.recipeRequest;
+
+    if (!recipeRequest) {
       return {
         statusCode: 400,
         headers: { ...cors, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          error: 'Cuerpo JSON inválido. Envía un JSON con el campo "userQuery".'
-        })
+        body: JSON.stringify({ error: 'Parámetro "recipeRequest" requerido.' })
       };
     }
 
-    const userQuery = parsedBody.userQuery;
-
-    if (!userQuery || typeof userQuery !== 'string') {
-      // Aquí sí dejamos 400 porque es un bug de cliente, no del modelo
+    // ---------- API KEY ----------
+    const API_KEY = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+    if (!API_KEY) {
+      const fallback = makeFallbackRecipe(
+        'Configuración de Chef-Bot pendiente',
+        'Ahora mismo Chef-Bot no está bien configurado en el servidor y no puede conectarse a la IA.',
+        [
+          'Revisa en Netlify que la variable de entorno GOOGLE_API_KEY esté definida correctamente.',
+          'Una vez configurada la clave de la API de Google, podrás generar recetas con IA.'
+        ]
+      );
       return {
-        statusCode: 400,
+        statusCode: 200,
         headers: { ...cors, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Parámetro "userQuery" requerido.' })
+        body: JSON.stringify(fallback)
       };
-    }
-
-    // Soportamos tanto GEMINI_API_KEY como GOOGLE_API_KEY (tu caso)
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-    if (!GEMINI_API_KEY) {
-      // Fallback bonito si falta API key (configuración)
-      return makeCardResponse({
-        myth: userQuery,
-        isTrue: false,
-        explanation_simple:
-          'Ahora mismo el verificador no está bien configurado en el servidor, así que no puedo revisar esta afirmación.',
-        explanation_expert:
-          'Falta GEMINI_API_KEY o GOOGLE_API_KEY en las variables de entorno del servidor. Es necesario configurar la clave de la API antes de poder usar el modelo.',
-        evidenceLevel: 'Baja',
-        sources: [],
-        category: 'Configuración',
-        relatedMyths: []
-      });
     }
 
     // ---------- CONFIG GEMINI ----------
@@ -100,113 +74,222 @@ exports.handler = async function (event, context) {
       process.env.GEMINI_MODEL ||
       process.env.GOOGLE_MODEL ||
       'gemini-2.5-flash';
-    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
 
     const systemPrompt = `
-Eres un verificador de afirmaciones científicas.
+Eres Chef-Bot, un asistente experto en cocina cotidiana y planificación de menús con enfoque en macros.
 
-Devuelve JSON con:
-- myth: string (afirmación parafraseada si procede)
-- isTrue: boolean
-- explanation_simple: 2–4 frases, lenguaje cotidiano (nivel B1), sin jerga ni acrónimos;
-  usa ejemplo/analogía si ayuda y evita porcentajes innecesarios.
-- explanation_expert: versión técnica y matizada (calidad y diseño de estudios)
-- evidenceLevel: "Alta" | "Moderada" | "Baja"
-- sources: array<string> con TIPOS DE EVIDENCIA (p. ej., "Revisiones sistemáticas",
-  "Ensayos clínicos aleatorizados", "Cohortes observacionales", "Opinión de expertos").
-  NO incluyas URLs, DOIs ni identificadores. SOLO tipos.
-- category: etiqueta breve (Nutrición, Ejercicio, Sueño, etc.)
-- relatedMyths: 0..5 afirmaciones relacionadas (sin URLs).
+RECIBES SIEMPRE un objeto JSON serializado como texto con esta forma aproximada:
+{
+  "comida": "Desayuno" | "Almuerzo" | "Cena" | "Merienda" | "Media Mañana" | "Post-Cena" | "Comida Única",
+  "descripcion": "texto breve con el tipo de plato",
+  "ingredientes": [
+    { "nombre": "arroz integral", "gramos": 90 },
+    { "nombre": "pechuga de pollo", "gramos": 150 }
+  ],
+  "macrosObjetivo": {
+    "proteina_g": 40,
+    "grasa_g": 15,
+    "carbohidratos_g": 60
+  },
+  "restricciones": "texto libre con alergias, intolerancias o dietas (por ejemplo, intolerancia a la lactosa, celiaquía, alergia a frutos secos, etc.)",
+  "notas": "instrucciones adicionales"
+}
 
-Criterios del nivel de evidencia:
-- Alta: metaanálisis/revisiones sistemáticas consistentes o múltiples ECA grandes.
-- Moderada: algunos ECA pequeños o consistencia observacional.
-- Baja: evidencia limitada/contradictoria o basada en mecanismos/series pequeñas.
+TU TAREA:
+Transformar esa información en una receta clara, coherente y práctica.
 
-Nunca des recomendaciones clínicas personalizadas.
-NO incluyas URLs ni DOIs en ningún campo.
+DEVUELVE SIEMPRE un JSON VÁLIDO con la estructura:
+
+{
+  "title": "string",
+  "shortDescription": "string",
+  "prepTimeMinutes": number,
+  "cookTimeMinutes": number,
+  "difficulty": "Muy fácil" | "Fácil" | "Media" | "Alta",
+  "steps": ["Paso 1...", "Paso 2...", "..."],
+  "tips": ["Consejo opcional 1", "Consejo opcional 2"],
+  "warnings": ["Aviso opcional 1", "Aviso opcional 2"]
+}
+
+REGLAS IMPORTANTES:
+1) NO inventes ingredientes nuevos. SOLO puedes usar los ingredientes que aparezcan en el campo "ingredientes".
+   - Puedes añadir únicamente sal, especias genéricas, hierbas aromáticas o agua cuando sean razonables.
+   - No añadas alimentos nuevos con carga calórica relevante ni ingredientes potencialmente alergénicos adicionales.
+
+2) RESPETA rigurosamente las restricciones dietéticas del campo "restricciones".
+   - Nunca propongas lácteos si se menciona intolerancia a la lactosa.
+   - Nunca uses gluten si se menciona celiaquía o "sin gluten".
+   - Nunca uses marisco si se menciona alergia al marisco, etc.
+
+3) Ajusta las instrucciones a cocina casera en español de España, con buena ortografía, frases completas y un tono cercano pero profesional.
+
+4) Los pasos deben ser coherentes con los gramos indicados y la forma habitual de cocinar cada ingrediente.
+   - Si hay 200 g de pechuga de pollo, la receta debe usar esa cantidad, sin eliminarla ni multiplicarla sin motivo.
+   - Mantén la receta razonablemente sencilla: 4–8 pasos suele ser lo ideal.
+
+5) NO des recomendaciones médicas ni sanitarias. Solo instrucciones culinarias.
+
+6) Devuelve ÚNICAMENTE el JSON indicado, sin explicaciones adicionales ni texto fuera del objeto.
 `;
 
     const responseSchema = {
       type: 'object',
       properties: {
-        myth: { type: 'string' },
-        isTrue: { type: 'boolean' },
-        explanation_simple: { type: 'string' },
-        explanation_expert: { type: 'string' },
-        evidenceLevel: { type: 'string' },
-        sources: { type: 'array', items: { type: 'string' } },
-        category: { type: 'string' },
-        relatedMyths: { type: 'array', items: { type: 'string' } }
+        title: { type: 'string' },
+        shortDescription: { type: 'string' },
+        prepTimeMinutes: { type: 'number' },
+        cookTimeMinutes: { type: 'number' },
+        difficulty: { type: 'string' },
+        steps: { type: 'array', items: { type: 'string' } },
+        tips: { type: 'array', items: { type: 'string' } },
+        warnings: { type: 'array', items: { type: 'string' } }
       },
-      required: [
-        'myth',
-        'isTrue',
-        'explanation_simple',
-        'explanation_expert',
-        'evidenceLevel'
-      ]
+      required: ['title', 'steps']
     };
 
     const payload = {
-      contents: [{ role: 'user', parts: [{ text: userQuery }] }],
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: JSON.stringify(recipeRequest)
+            }
+          ]
+        }
+      ],
       systemInstruction: { role: 'user', parts: [{ text: systemPrompt }] },
       generationConfig: {
-        temperature: 0.2,
+        temperature: 0.35,
         topP: 0.9,
         topK: 32,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 1024,
         responseMimeType: 'application/json',
         responseSchema
       }
     };
 
-    // ---------- UTILIDADES LIMPIEZA ----------
-    const urlLike = /(https?:\/\/|www\.)[^\s)]+/gi;
-    const stripUrls = (s) =>
-      typeof s === 'string'
-        ? s.replace(urlLike, '').replace(/\(\s*\)/g, '').trim()
-        : s;
-    const isUrlish = (s) =>
-      typeof s === 'string' && /(https?:\/\/|www\.)/i.test(s);
+    const TIMEOUT_MS = parseInt(
+      process.env.GEMINI_TIMEOUT_MS || '8000',
+      10
+    );
+
+    // ---------- LLAMADA A GEMINI CON TIMEOUT ----------
+    let result;
+    let res;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+    try {
+      res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+    } catch (err) {
+      clearTimeout(timeoutId);
+      const fallback = makeFallbackRecipe(
+        'No se ha podido contactar con la IA',
+        'Ha habido un problema de conexión con el servicio de IA de Google.',
+        [
+          'Es probable que se trate de un problema temporal de red o de la API.',
+          'Intenta generar la receta de nuevo en unos minutos.'
+        ]
+      );
+      return {
+        statusCode: 200,
+        headers: { ...cors, 'Content-Type': 'application/json' },
+        body: JSON.stringify(fallback)
+      };
+    }
+
+    clearTimeout(timeoutId);
+
+    try {
+      result = await res.json();
+    } catch (err) {
+      const fallback = makeFallbackRecipe(
+        'Respuesta de IA no válida',
+        'La respuesta devuelta por la IA no se ha podido interpretar correctamente.',
+        [
+          'Puede haberse generado un JSON mal formado.',
+          'Intenta generar de nuevo la receta o revisa la configuración del modelo.'
+        ]
+      );
+      return {
+        statusCode: 200,
+        headers: { ...cors, 'Content-Type': 'application/json' },
+        body: JSON.stringify(fallback)
+      };
+    }
+
+    if (!res.ok) {
+      const msg =
+        (result && result.error && result.error.message) ||
+        'Error desconocido en la API de Google.';
+      const fallback = makeFallbackRecipe(
+        'Error en el servicio de IA',
+        'La API de Google ha devuelto un error al intentar generar la receta.',
+        [`Mensaje de la API: ${msg}`]
+      );
+      return {
+        statusCode: 200,
+        headers: { ...cors, 'Content-Type': 'application/json' },
+        body: JSON.stringify(fallback)
+      };
+    }
+
+    const rawText =
+      result?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
     const stripFences = (t) => {
       let x = (t || '').trim();
-      if (x.startsWith('```'))
+      if (x.startsWith('```')) {
         x = x
           .replace(/^```(?:json)?\s*/i, '')
-          .replace(/```$/, '');
-      return x.trim();
+          .replace(/```$/, '')
+          .trim();
+      }
+      return x;
     };
 
     const robustParse = (text) => {
-      // 1) directo
-      try {
-        return JSON.parse(text);
-      } catch {}
-      const t = text.trim();
+      const t = stripFences(text);
+      if (!t) return null;
 
-      // 2) array raíz -> primer objeto
+      // 1) Intento directo
+      try {
+        return JSON.parse(t);
+      } catch {}
+
+      // 2) Si empieza por [, intentamos como array y tomamos el primer objeto
       if (t.startsWith('[')) {
         try {
-          const a = JSON.parse(t);
-          if (Array.isArray(a) && a.length && typeof a[0] === 'object')
-            return a[0];
+          const arr = JSON.parse(t);
+          if (Array.isArray(arr) && arr.length && typeof arr[0] === 'object') {
+            return arr[0];
+          }
         } catch {}
       }
 
-      // 3) extraer bloque { ... } balanceado
+      // 3) Extraer bloque { ... } balanceado
       const start = t.indexOf('{');
       if (start >= 0) {
-        let depth = 0,
-          inStr = false,
-          esc = false;
+        let depth = 0;
+        let inStr = false;
+        let esc = false;
         for (let i = start; i < t.length; i++) {
           const ch = t[i];
           if (inStr) {
-            if (esc) esc = false;
-            else if (ch === '\\') esc = true;
-            else if (ch === '"') inStr = false;
+            if (esc) {
+              esc = false;
+            } else if (ch === '\\') {
+              esc = true;
+            } else if (ch === '"') {
+              inStr = false;
+            }
           } else {
             if (ch === '"') inStr = true;
             else if (ch === '{') depth++;
@@ -226,243 +309,74 @@ NO incluyas URLs ni DOIs en ningún campo.
       return null;
     };
 
-    // ---------- LLAMADA A GEMINI CON TIMEOUT + RETRIES ----------
-    const TIMEOUT_MS = parseInt(
-      process.env.GEMINI_TIMEOUT_MS || process.env.GOOGLE_TIMEOUT_MS || '8000',
-      10
-    );
-    let res;
-    let result;
-    let attempt = 0;
-    const maxRetries = 2;
-
-    while (true) {
-      let timedOut = false;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        timedOut = true;
-        controller.abort();
-      }, TIMEOUT_MS);
-
-      try {
-        res = await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          signal: controller.signal
-        });
-      } catch (err) {
-        clearTimeout(timeoutId);
-
-        // TIMEOUT propio -> tarjeta "Tiempo de espera"
-        if (timedOut) {
-          return makeCardResponse({
-            myth: userQuery,
-            isTrue: false,
-            explanation_simple:
-              'La respuesta ha tardado demasiado. Ahora mismo no puedo revisar bien esta afirmación; vuelve a intentarlo en unos minutos.',
-            explanation_expert:
-              'La llamada a la API de IA excedió el tiempo máximo configurado en el servidor. Se ofrece una respuesta conservadora con evidencia considerada baja.',
-            evidenceLevel: 'Baja',
-            sources: [],
-            category: 'Tiempo de espera',
-            relatedMyths: []
-          });
-        }
-
-        // Otros errores de red
-        return makeCardResponse({
-          myth: userQuery,
-          isTrue: false,
-          explanation_simple:
-            'Ha habido un problema de conexión con el servicio de IA. No puedo verificar esta afirmación en este momento.',
-          explanation_expert:
-            `Se produjo un error de red al llamar a la API de Google: ${
-              err?.message || String(err)
-            }. Es probable que sea un problema transitorio de conectividad.`,
-          evidenceLevel: 'Baja',
-          sources: [],
-          category: 'Conectividad',
-          relatedMyths: []
-        });
-      }
-
-      clearTimeout(timeoutId);
-      result = await res.json().catch(() => ({}));
-
-      if (res.ok) {
-        break; // todo bien, salimos del bucle
-      }
-
-      const msg = result?.error?.message || '';
-      const code = result?.error?.code || res.status || 0;
-
-      const isOverloaded =
-        res.status === 503 ||
-        res.status === 504 ||
-        /model is overloaded/i.test(msg) ||
-        /overloaded/i.test(msg) ||
-        /deadline exceeded/i.test(msg) ||
-        /timeout/i.test(msg);
-
-      const isPolicy =
-        res.status === 400 ||
-        res.status === 403 ||
-        /safety/i.test(msg) ||
-        /policy/i.test(msg) ||
-        /blocked/i.test(msg);
-
-      const isAuth =
-        res.status === 401 ||
-        res.status === 403 ||
-        /api key/i.test(msg) ||
-        /unauthorized/i.test(msg) ||
-        /permission/i.test(msg);
-
-      // Si está sobrecargado y quedan reintentos -> backoff
-      if (isOverloaded && attempt < maxRetries) {
-        const delayMs = 1000 * Math.pow(2, attempt); // 1s, 2s...
-        await new Promise((r) => setTimeout(r, delayMs));
-        attempt++;
-        continue;
-      }
-
-      // Saturación / timeout tras reintentos -> tarjeta de "Saturación"
-      if (isOverloaded) {
-        return makeCardResponse({
-          myth: userQuery,
-          isTrue: false,
-          explanation_simple:
-            'Ahora mismo el modelo de IA está saturado o respondiendo con retraso. No puedo verificar bien esta afirmación; vuelve a intentarlo en unos minutos.',
-          explanation_expert:
-            `La API de Google devolvió errores de saturación o tiempo de espera (código ${code}). Tras varios intentos, se ofrece una respuesta conservadora con evidencia considerada baja.`,
-          evidenceLevel: 'Baja',
-          sources: [],
-          category: 'Saturación',
-          relatedMyths: []
-        });
-      }
-
-      // Errores de políticas / safety
-      if (isPolicy) {
-        return makeCardResponse({
-          myth: userQuery,
-          isTrue: false,
-          explanation_simple:
-            'No puedo valorar esta afirmación tal como está formulada porque entra en una zona restringida por las políticas del modelo.',
-          explanation_expert:
-            `La petición fue bloqueada por las políticas de seguridad o contenido de la API de Google (código ${code}). Es probable que la afirmación implique temas sensibles o demasiado específicos.`,
-          evidenceLevel: 'Baja',
-          sources: [],
-          category: 'Políticas',
-          relatedMyths: []
-        });
-      }
-
-      // Errores de autenticación / permisos
-      if (isAuth) {
-        return makeCardResponse({
-          myth: userQuery,
-          isTrue: false,
-          explanation_simple:
-            'Ahora mismo el verificador no tiene permisos correctos para acceder al modelo de IA.',
-          explanation_expert:
-            `La API de Google devolvió un error de autenticación o permisos (código ${code}). Es necesario revisar la clave de API o los permisos del proyecto.`,
-          evidenceLevel: 'Baja',
-          sources: [],
-          category: 'Credenciales',
-          relatedMyths: []
-        });
-      }
-
-      // Otros errores de la API (4xx/5xx genéricos)
-      return makeCardResponse({
-        myth: userQuery,
-        isTrue: false,
-        explanation_simple:
-          'Ha ocurrido un problema inesperado al consultar el modelo de IA. No puedo revisar esta afirmación en este momento.',
-        explanation_expert:
-          `La API de Google devolvió un error no esperado (status ${res.status}, código ${code}). Mensaje: ${
-            msg || 'sin detalle proporcionado.'
-          }`,
-        evidenceLevel: 'Baja',
-        sources: [],
-        category: 'Error de servicio',
-        relatedMyths: []
-      });
+    let recipe = robustParse(rawText);
+    if (!recipe || typeof recipe !== 'object') {
+      recipe = makeFallbackRecipe(
+        'Receta simplificada',
+        'No he podido estructurar la respuesta de la IA, así que te propongo una receta simplificada basada en los ingredientes.',
+        [
+          'La respuesta original del modelo no se ha podido convertir a un JSON válido.',
+          'Se ha generado una receta de respaldo para no interrumpir la experiencia de uso.'
+        ]
+      );
     }
 
-    // ---------- NORMALIZACIÓN EN CASO DE ÉXITO ----------
-    const pf = result?.promptFeedback;
+    // ---------- NORMALIZACIÓN ----------
+    const toStringSafe = (v) =>
+      typeof v === 'string' ? v : v == null ? '' : String(v);
 
-    if (!result?.candidates?.length) {
-      // 0 candidatos: bloqueado por política u otro motivo
-      return makeCardResponse({
-        myth: userQuery,
-        isTrue: false,
-        explanation_simple:
-          'No puedo valorar esta afirmación con seguridad por cómo está formulada o por políticas del servicio.',
-        explanation_expert:
-          `La API devolvió 0 candidatos. Motivo reportado: ${
-            pf?.blockReason || 'no especificado por la API'
-          }.`,
-        evidenceLevel: 'Baja',
-        sources: [],
-        category: 'Bloqueada',
-        relatedMyths: []
-      });
-    }
-
-    const rawText =
-      result?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const parsed = robustParse(stripFences(rawText));
-
-    const obj =
-      parsed && typeof parsed === 'object'
-        ? parsed
-        : {
-            myth: userQuery,
-            isTrue: false,
-            explanation_simple:
-              'No he podido estructurar bien la respuesta del modelo. En resumen, no hay pruebas sólidas para afirmarlo con seguridad.',
-            explanation_expert:
-              'La respuesta del modelo no se pudo convertir del todo bien a formato estructurado. Se ofrece una síntesis conservadora basada en la evidencia disponible.',
-            evidenceLevel: 'Baja',
-            sources: [],
-            category: '',
-            relatedMyths: []
-          };
-
-    const clean = {
-      myth: stripUrls(obj.myth || userQuery),
-      isTrue: !!obj.isTrue,
-      explanation_simple: stripUrls(obj.explanation_simple || ''),
-      explanation_expert: stripUrls(obj.explanation_expert || ''),
-      evidenceLevel: stripUrls(obj.evidenceLevel || 'Baja'),
-      sources: Array.isArray(obj.sources)
-        ? obj.sources.filter((s) => !isUrlish(s)).map(stripUrls)
-        : [],
-      category: stripUrls(obj.category || ''),
-      relatedMyths: Array.isArray(obj.relatedMyths)
-        ? obj.relatedMyths.filter((s) => !isUrlish(s)).map(stripUrls)
-        : []
+    const toNumberSafe = (v, def) => {
+      const n = Number(v);
+      return Number.isFinite(n) && n >= 0 ? n : def;
     };
 
-    return makeCardResponse(clean);
+    const toStringArray = (arr) =>
+      Array.isArray(arr)
+        ? arr
+            .map((x) => toStringSafe(x))
+            .map((x) => x.trim())
+            .filter(Boolean)
+        : [];
+
+    const safeRecipe = {
+      title: toStringSafe(recipe.title || 'Receta sugerida'),
+      shortDescription: toStringSafe(recipe.shortDescription || ''),
+      prepTimeMinutes: toNumberSafe(recipe.prepTimeMinutes, 10),
+      cookTimeMinutes: toNumberSafe(recipe.cookTimeMinutes, 15),
+      difficulty: toStringSafe(recipe.difficulty || 'Fácil'),
+      steps:
+        toStringArray(recipe.steps).length > 0
+          ? toStringArray(recipe.steps)
+          : [
+              'Prepara los ingredientes siguiendo una técnica sencilla (plancha, horno o salteado suave).',
+              'Sirve el plato respetando las cantidades de cada ingrediente según el plan de Chef-Bot.'
+            ],
+      tips: toStringArray(recipe.tips),
+      warnings: toStringArray(recipe.warnings)
+    };
+
+    return {
+      statusCode: 200,
+      headers: {
+        ...cors,
+        'Content-Type': 'application/json',
+        'x-chef-bot-func-version': 'v1-gemini-recipe-2025-11-17'
+      },
+      body: JSON.stringify(safeRecipe)
+    };
   } catch (error) {
-    // ---------- CUALQUIER EXCEPCIÓN INTERNA INESPERADA ----------
-    return makeCardResponse({
-      myth: '',
-      isTrue: false,
-      explanation_simple:
-        'Ha ocurrido un problema interno al procesar la consulta. No puedo revisar esta afirmación ahora mismo.',
-      explanation_expert: `Se produjo una excepción interna en la función del servidor: ${
-        error?.message || String(error)
-      }. Conviene revisar los logs del servidor para depurar el origen.`,
-      evidenceLevel: 'Baja',
-      sources: [],
-      category: 'Error interno',
-      relatedMyths: []
-    });
+    const fallback = makeFallbackRecipe(
+      'Error interno en Chef-Bot',
+      'Ha ocurrido un problema interno al procesar la consulta en Chef-Bot.',
+      [
+        `Detalle técnico: ${error?.message || String(error)}`,
+        'Revisa los logs de Netlify para depurar el origen del error.'
+      ]
+    );
+    return {
+      statusCode: 200,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+      body: JSON.stringify(fallback)
+    };
   }
 };
