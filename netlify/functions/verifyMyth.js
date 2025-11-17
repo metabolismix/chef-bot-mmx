@@ -1,126 +1,113 @@
 // netlify/functions/verifymyth.js
-/* eslint-disable */
-const ENDPOINT =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+// Función serverless de Netlify para llamar a Gemini usando GOOGLE_API_KEY
+// y devolver texto en español con buena ortografía y respetando restricciones
+// dietéticas si se incluyen en el contexto.
 
-function corsHeaders() {
-  return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  };
-}
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS"
+};
 
 exports.handler = async (event) => {
   // Preflight CORS
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers: corsHeaders(), body: '' };
-  }
-
-  if (event.httpMethod !== 'POST') {
+  if (event.httpMethod === "OPTIONS") {
     return {
-      statusCode: 405,
-      headers: corsHeaders(),
-      body: JSON.stringify({ error: 'Method Not Allowed' }),
+      statusCode: 200,
+      headers: CORS_HEADERS,
+      body: "OK"
     };
   }
 
-  const apiKey = process.env.GOOGLE_API_KEY;
-  if (!apiKey) {
+  if (event.httpMethod !== "POST") {
     return {
-      statusCode: 500,
-      headers: corsHeaders(),
-      body: JSON.stringify({
-        error: 'Falta GOOGLE_API_KEY en variables de entorno',
-      }),
+      statusCode: 405,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ error: "Método no permitido. Usa POST." })
     };
   }
 
   try {
-    const {
-      prompt,
-      maxTokens = 600,
-      temperature = 0.7,
-      topP = 0.95,
-    } = JSON.parse(event.body || '{}');
+    const apiKey = process.env.GOOGLE_API_KEY;
+    if (!apiKey) {
+      return {
+        statusCode: 500,
+        headers: CORS_HEADERS,
+        body: JSON.stringify({
+          error: "GOOGLE_API_KEY no está configurada en las variables de entorno."
+        })
+      };
+    }
 
-    if (!prompt || typeof prompt !== 'string') {
+    const body = JSON.parse(event.body || "{}");
+    const prompt = body.prompt;
+    const context = body.context || null;
+
+    if (!prompt || typeof prompt !== "string") {
       return {
         statusCode: 400,
-        headers: corsHeaders(),
-        body: JSON.stringify({ error: 'prompt requerido (string)' }),
+        headers: CORS_HEADERS,
+        body: JSON.stringify({
+          error: 'Falta el campo "prompt" en la petición (string obligatorio).'
+        })
       };
     }
 
-    const body = {
-      systemInstruction: {
-        role: 'user',
-        parts: [
-          {
-            text:
-              'Eres MacroChefBot, un asistente de cocina que genera recetas en español, ' +
-              'claras, prácticas y seguras. Devuelve solo HTML simple (sin <script>), ' +
-              'con encabezados, listas de ingredientes y pasos numerados. Evita claims ' +
-              'sanitarios y comentarios sobre patologías.',
-          },
-        ],
-      },
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const systemInstructions = `
+Eres un asistente experto en nutrición y fitness.
+Responde SIEMPRE en español de España, con ortografía y gramática impecables.
+Si el usuario te da un plan de comidas o restricciones dietéticas en el campo "context",
+NUNCA propongas alimentos que las contradigan (ej.: intolerancia a la lactosa → no lácteos; celiaquía → sin gluten).
+Si no puedes estar seguro de cumplirlas, explica la duda y sugiere consultar a un profesional sanitario.
+No inventes datos nutricionales concretos si no los conoces, limita la respuesta a explicaciones generales.
+`;
+
+    const parts = [
+      { text: systemInstructions },
+      { text: "Pregunta o instrucción del usuario:" },
+      { text: prompt }
+    ];
+
+    if (context) {
+      parts.push({
+        text: "\nContexto adicional proporcionado por la aplicación:\n" +
+          JSON.stringify(context, null, 2)
+      });
+    }
+
+    const result = await model.generateContent({
       contents: [
         {
-          role: 'user',
-          parts: [{ text: prompt }],
-        },
-      ],
-      generationConfig: {
-        temperature,
-        topP,
-        maxOutputTokens: maxTokens,
-        candidateCount: 1,
-      },
-      // safetySettings opcionales si quieres endurecer filtros
-    };
-
-    const url = `${ENDPOINT}?key=${encodeURIComponent(apiKey)}`;
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify(body),
+          role: "user",
+          parts
+        }
+      ]
     });
 
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => '');
-      return {
-        statusCode: resp.status,
-        headers: corsHeaders(),
-        body: JSON.stringify({ error: 'Error de Gemini', details: text }),
-      };
-    }
-
-    const data = await resp.json();
-    const text =
-      (data &&
-        data.candidates &&
-        data.candidates[0] &&
-        data.candidates[0].content &&
-        (data.candidates[0].content.parts[0]?.text ||
-          data.candidates[0].content.parts
-            .map((p) => p.text || '')
-            .join('\n'))) ||
-      '';
+    const responseText = result.response.text();
 
     return {
       statusCode: 200,
-      headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, raw: data }),
+      headers: {
+        ...CORS_HEADERS,
+        "Content-Type": "application/json; charset=utf-8"
+      },
+      body: JSON.stringify({ result: responseText })
     };
-  } catch (err) {
+  } catch (error) {
+    console.error("Error en verifymyth:", error);
     return {
       statusCode: 500,
-      headers: corsHeaders(),
+      headers: CORS_HEADERS,
       body: JSON.stringify({
-        error: 'Error interno',
-        message: String(err?.message || err),
-      }),
+        error: "Error al llamar a la API de Gemini.",
+        details: String(error && error.message ? error.message : error)
+      })
     };
   }
 };
