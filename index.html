@@ -664,7 +664,7 @@
         const numMeals = parseInt(numMealsSelector.value,10);
         const numDays = parseInt(numDaysToPlanSelector.value,10);
         const dietaryText = dietaryFilterInput.value || '';
-        const fridgeText = (fridgeIngredientsInput.value || '').toLowerCase();
+        const fridgeText = (fridgeIngredientsInput.value || '');
 
         if(pTarget <= 0 || fTarget <= 0 || cTarget <= 0){
           alert('Introduce objetivos de proteínas, grasas y carbohidratos mayores que cero.');
@@ -731,17 +731,33 @@
           return;
         }
 
-        // Lista de ingredientes de nevera filtrada por perfil
+        // Lista de ingredientes de nevera filtrada por perfil, con matching robusto
         let fridgeList = [];
-        if(useFridge && fridgeText.length){
-          fridgeList = fridgeText
-            .split(',')
+        if(useFridge && fridgeText.trim().length){
+          const fridgeTextNorm = normalizeText(fridgeText);
+          const fridgeTokens = fridgeText
+            .split(/[,;/\n]+/)
             .map(s => s.trim())
-            .filter(Boolean)
-            .filter(name => {
-              const fd = foodDatabase[name];
-              return !!fd && foodRespectsProfile(name, profile);
+            .filter(Boolean);
+
+          const fridgeSet = new Set();
+
+          Object.keys(foodDatabase).forEach(name => {
+            const nameNorm = normalizeText(name);
+
+            const inText = fridgeTextNorm.includes(nameNorm);
+            const tokenMatch = fridgeTokens.some(token => {
+              const tokNorm = normalizeText(token);
+              if(tokNorm.length < 4) return false;
+              return nameNorm.includes(tokNorm) || tokNorm.includes(nameNorm);
             });
+
+            if((inText || tokenMatch) && foodRespectsProfile(name, profile)){
+              fridgeSet.add(name);
+            }
+          });
+
+          fridgeList = Array.from(fridgeSet);
         }
 
         const mealConfig = mealDistributions[numMeals] || mealDistributions[4];
