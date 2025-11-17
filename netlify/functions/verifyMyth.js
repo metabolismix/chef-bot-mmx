@@ -53,7 +53,19 @@ exports.handler = async function (event, context) {
 
   try {
     // ---------- INPUT ----------
-    const parsedBody = JSON.parse(event.body || '{}');
+    let parsedBody;
+    try {
+      parsedBody = JSON.parse(event.body || '{}');
+    } catch {
+      return {
+        statusCode: 400,
+        headers: { ...cors, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          error: 'Cuerpo JSON inválido. Envía un JSON con el campo "userQuery".'
+        })
+      };
+    }
+
     const userQuery = parsedBody.userQuery;
 
     if (!userQuery || typeof userQuery !== 'string') {
