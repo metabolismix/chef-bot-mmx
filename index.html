@@ -1,523 +1,337 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  <title>Mito-Bot</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MacroChefBot — Menús con Gemini</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
-    body { font-family: 'Inter', sans-serif; }
-    .carousel-track { display:flex; transition: transform 0.5s cubic-bezier(0.25,0.8,0.25,1); }
-    .carousel-item { flex:0 0 100%; }
-    .btn-arrow:disabled { opacity:0.3; cursor:not-allowed; }
-    .loader{ border:4px solid rgba(0,0,0,0.1); border-top-color:#2dd4bf; border-radius:50%; width:40px; height:40px; animation:spin 1s linear infinite; }
-    @keyframes spin { to { transform:rotate(360deg); } }
-    .form-container,.results-container{ box-shadow:0 20px 25px -5px rgb(0 0 0 / 0.05), 0 8px 10px -6px rgb(0 0 0 / 0.05); }
-    .suggestion-btn{ transition:all .2s; } .suggestion-btn:hover{ transform:translateY(-2px); box-shadow:0 4px 10px rgba(0,0,0,.08);}
-    .mic-btn.is-listening { animation:pulse 1.5s infinite; }
-    @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(45,212,191,.4);} 70%{box-shadow:0 0 0 10px rgba(45,212,191,0);} }
-    .difficulty-toggle{ color:#475569; } .difficulty-toggle.active{ color:#0f766e; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.1);}
-    .filter-btn{ transition:all .2s; } .filter-btn.active{ background:#00A99D; color:#fff; }
-    .related-myth-btn{ transition:all .2s; border:1px solid #e2e8f0; } .related-myth-btn:hover{ background:#f1f5f9; border-color:#cbd5e1; }
-    .share-btn{ transition: background-color .2s; } .copied{ background:#16a34a !important; color:#fff !important; }
+    body { font-family:'Inter',sans-serif; background-color:#f3f4f6; }
+    .container { max-width: 900px; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+    .menu-item { animation: fadeIn .5s ease-out forwards; }
+    .bg-gradient-turquesa { background-image: linear-gradient(to right,#00b8d4,#00a8c2); }
+    .text-gradient-turquesa { background-image: linear-gradient(to right,#00b8d4,#00a8c2); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+    .fridge-section { background-color:#e0f7fa; border:2px dashed #00b8d4; }
+    .option-selector input[type="radio"]:checked + label { background-color:#00b8d4;color:white;box-shadow:0 4px 6px rgba(0,184,212,.3);border-color:#00b8d4 }
+    .badge { font-size:.75rem;border:1px solid #c7f5ff;background:#ecfeff;color:#0369a1;padding:.15rem .4rem;border-radius:.35rem }
+    .status-dot{width:.6rem;height:.6rem;border-radius:9999px;display:inline-block;margin-right:.35rem}
   </style>
 </head>
-<body class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 to-gray-100">
-
-  <main class="w-full max-w-md mx-auto">
-    <header class="text-center mb-8 flex flex-col items-center">
-      <div class="mb-4">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" class="h-20 w-20">
-          <defs>
-            <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#00A99D"/>
-              <stop offset="100%" stop-color="#26C6DA"/>
-            </linearGradient>
-          </defs>
-          <g stroke="url(#logoGradient)" stroke-width="7" stroke-linecap="round" fill="none">
-            <path d="M30 10 C 70 30, 70 70, 30 90"/>
-            <path d="M70 10 C 30 30, 30 70, 70 90"/>
-            <line x1="32" y1="20" x2="68" y2="20"/>
-            <line x1="42" y1="35" x2="58" y2="35"/>
-            <line x1="42" y1="65" x2="58" y2="65"/>
-            <line x1="32" y1="80" x2="68" y2="80"/>
-          </g>
-        </svg>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center py-10 px-4">
+  <div class="container mx-auto p-6 bg-white rounded-2xl shadow-xl border border-gray-200">
+    <!-- Header -->
+    <div class="flex items-start justify-between mb-6">
+      <div>
+        <h1 class="text-4xl font-bold"><span class="text-gradient-turquesa">MacroChefBot</span></h1>
+        <p class="mt-2 text-lg text-gray-500">Tu chef IA personal: precisión en macros, variedad en el plato.</p>
       </div>
-      <h1 class="text-5xl md:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-teal-400 to-cyan-500 bg-clip-text text-transparent mb-2">
-        Mito-Bot
-      </h1>
-      <h2 class="text-2xl font-bold text-slate-700 tracking-tight">Desmitificador Científico</h2>
-      <p class="text-slate-500 mt-3 max-w-xs">Respuestas claras y directas basadas en la evidencia.</p>
-    </header>
-
-    <div id="main-content">
-      <form id="myth-form" class="form-container bg-white p-6 rounded-2xl mb-8 border border-slate-200/80">
-        <label for="myth-input" class="block text-sm font-bold mb-2 bg-gradient-to-r from-teal-400 to-cyan-500 bg-clip-text text-transparent">¿Es verdad que...?</label>
-        <div class="relative">
-          <textarea id="myth-input" rows="3" class="w-full p-3 pr-12 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-shadow placeholder-slate-400" placeholder="...la creatina daña los riñones?"></textarea>
-          <button id="mic-btn" type="button" class="mic-btn absolute top-1/2 right-3 -translate-y-1/2 p-2 rounded-full text-slate-400 hover:bg-slate-100 hover:text-cyan-500 transition-all" title="Verificar por voz">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
-            </svg>
-          </button>
-        </div>
-
-        <div id="suggestions" class="mt-4 text-sm text-slate-600">
-          <p class="font-medium mb-2">O prueba con un clic:</p>
-          <div class="flex flex-wrap gap-2">
-            <button type="button" class="suggestion-btn bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-xs hover:bg-slate-200">¿El ayuno intermitente adelgaza?</button>
-            <button type="button" class="suggestion-btn bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-xs hover:bg-slate-200">¿Los alimentos orgánicos son más nutritivos?</button>
-            <button type="button" class="suggestion-btn bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-xs hover:bg-slate-200">¿Necesitamos 8 vasos de agua al día?</button>
-          </div>
-        </div>
-
-        <button type="submit" class="mt-6 w-full bg-gradient-to-r from-teal-400 to-cyan-500 text-white font-bold py-3 px-4 rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 transition-all">
-          Verificar Evidencia
-        </button>
-      </form>
-
-      <div id="filter-container" class="mb-4"></div>
+      <div class="text-right">
+        <div class="badge"><span class="status-dot" id="geminiStatusDot" style="background:#f59e0b"></span>Gemini 2.5-Flash (Netlify)</div>
+        <div id="geminiStatusMsg" class="text-xs text-gray-500 mt-1">pendiente de primera llamada…</div>
+      </div>
     </div>
 
-    <section id="results-section" class="relative">
-      <div id="loader" class="hidden absolute inset-0 bg-white/70 backdrop-blur-sm flex items-center justify-center rounded-2xl z-20">
-        <div class="loader"></div>
-      </div>
-
-      <div id="carousel-container" class="results-container overflow-hidden rounded-2xl bg-white relative border border-slate-200/80">
-        <div id="carousel-track" class="carousel-track" onclick="handleCardClick(event)"></div>
-      </div>
-
-      <div id="initial-state" class="results-container text-center p-10 bg-white rounded-2xl border border-slate-200/80">
-        <svg class="mx-auto h-12 w-12 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197M10.5 6a4.5 4.5 0 100 9 4.5 4.5 0 000-9z"/>
-        </svg>
-        <h3 class="mt-4 text-lg font-medium text-slate-800">Esperando tu consulta</h3>
-        <p class="mt-1 text-sm text-slate-500">Los resultados aparecerán aquí.</p>
-      </div>
-
-      <div id="navigation-controls" class="hidden justify-between items-center mt-4 px-2">
-        <button id="prev-btn" class="btn-arrow p-2 rounded-full bg-white shadow-md hover:bg-slate-100 transition-all disabled:opacity-50">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-        </button>
-        <div class="flex items-center gap-4">
-          <div id="card-counter" class="text-sm font-semibold text-slate-600 tracking-wider"></div>
-          <button id="clear-history-btn" title="Limpiar historial" class="text-slate-400 hover:text-red-500 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd"/></svg>
-          </button>
+    <!-- Objetivos -->
+    <div class="bg-cyan-50 p-6 rounded-xl mb-6 border border-cyan-200">
+      <h2 class="text-2xl font-semibold text-cyan-800 mb-4">Mis objetivos diarios</h2>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div>
+          <label for="targetProtein" class="block text-sm font-medium text-cyan-700">Proteína (g)</label>
+          <input type="number" id="targetProtein" value="180" class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
         </div>
-        <button id="next-btn" class="btn-arrow p-2 rounded-full bg-white shadow-md hover:bg-slate-100 transition-all disabled:opacity-50">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-        </button>
+        <div>
+          <label for="targetFat" class="block text-sm font-medium text-cyan-700">Grasas (g)</label>
+          <input type="number" id="targetFat" value="80" class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
+        </div>
+        <div>
+          <label for="targetCarbs" class="block text-sm font-medium text-cyan-700">Carbohidratos (g)</label>
+          <input type="number" id="targetCarbs" value="250" class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-cyan-700">Calorías (kcal)</label>
+          <p id="totalCalories" class="mt-1 block w-full px-4 py-2 bg-cyan-100 font-bold text-lg text-cyan-800 rounded-lg border border-cyan-300">2490</p>
+        </div>
       </div>
-    </section>
-  </main>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div>
+          <label for="numMeals" class="block text-sm font-medium text-cyan-700 mb-1">Comidas/día</label>
+          <select id="numMeals" class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
+            <option value="1">1 comida</option>
+            <option value="2">2 comidas</option>
+            <option value="3">3 comidas</option>
+            <option value="4" selected>4 comidas</option>
+            <option value="5">5 comidas</option>
+            <option value="6">6 comidas</option>
+          </select>
+        </div>
+        <div>
+          <label for="numDaysToPlan" class="block text-sm font-medium text-cyan-700 mb-1">Días a planificar</label>
+          <select id="numDaysToPlan" class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
+            <option value="1">1 día</option>
+            <option value="3">3 días</option>
+            <option value="5">5 días</option>
+            <option value="7" selected>7 días (semanal)</option>
+          </select>
+        </div>
+        <div>
+          <label for="dietaryFilter" class="block text-sm font-medium text-cyan-700 mb-1">Restricciones dietéticas</label>
+          <input type="text" id="dietaryFilter" value="Ninguna" class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg focus:outline-none focus:ring-cyan-500 focus:border-cyan-500" placeholder="p.ej.: sin gluten, lácteos, huevo, frutos secos">
+        </div>
+      </div>
+
+      <button id="generateMenusBtn" class="w-full mt-3 px-6 py-3 border-4 border-white text-base font-medium rounded-xl text-white bg-gradient-turquesa hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 shadow-lg">
+        Generar plan semanal (ignorar nevera)
+      </button>
+    </div>
+
+    <!-- ¿Qué tengo en la nevera? -->
+    <div class="fridge-section p-6 rounded-xl mb-8">
+      <h2 class="text-2xl font-semibold text-cyan-900 mb-3">¿Qué tengo en la nevera?</h2>
+      <p class="text-sm text-cyan-700 mb-3">Lista tus ingredientes disponibles (ej.: pechuga, brócoli, pasta). La IA intentará priorizarlos.</p>
+      <textarea id="fridgeIngredients" rows="2" placeholder="Ej.: pechuga de pollo, brócoli, arroz, aguacate..." class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-400 rounded-lg focus:outline-none focus:ring-cyan-500 focus:border-cyan-500"></textarea>
+      <button id="generateFridgeBtn" class="w-full mt-4 px-6 py-3 border-4 border-white text-base font-medium rounded-xl text-white bg-gradient-turquesa hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 shadow-lg">
+        Generar plan semanal ¡con mi nevera!
+      </button>
+    </div>
+
+    <!-- Menús -->
+    <div id="generatedMenus" class="hidden">
+      <h2 class="text-2xl font-semibold text-gray-700 mb-4" id="menusTitle">Plan semanal sugerido</h2>
+      <div id="menusContainer" class="space-y-8"></div>
+    </div>
+  </div>
 
   <script>
-    // ---------- ELEMENTOS ----------
-    const mythForm = document.getElementById('myth-form');
-    const mythInput = document.getElementById('myth-input');
-    const micBtn = document.getElementById('mic-btn');
-    const suggestionsEl = document.getElementById('suggestions');
+    // --- Estado global mínimo y utilidades ---
+    let currentPlanData = null;
+    window.availableFoods = []; // reservado para futuras versiones
 
-    const loader = document.getElementById('loader');
-    const carouselTrack = document.getElementById('carousel-track');
-    const navigationControls = document.getElementById('navigation-controls');
-    const prevBtn = document.getElementById('prev-btn');
-    const nextBtn = document.getElementById('next-btn');
-    const cardCounter = document.getElementById('card-counter');
-    const clearHistoryBtn = document.getElementById('clear-history-btn');
-    const filterContainer = document.getElementById('filter-container');
-    const initialState = document.getElementById('initial-state');
+    // UI elements
+    const targetProteinInput = document.getElementById('targetProtein');
+    const targetFatInput = document.getElementById('targetFat');
+    const targetCarbsInput = document.getElementById('targetCarbs');
+    const totalCaloriesElement = document.getElementById('totalCalories');
+    const generateMenusBtn = document.getElementById('generateMenusBtn');
+    const generateFridgeBtn = document.getElementById('generateFridgeBtn');
+    const fridgeIngredientsInput = document.getElementById('fridgeIngredients');
+    const generatedMenusSection = document.getElementById('generatedMenus');
+    const menusContainer = document.getElementById('menusContainer');
+    const dietaryFilterInput = document.getElementById('dietaryFilter');
+    const numMealsSelector = document.getElementById('numMeals');
+    const numDaysToPlanSelector = document.getElementById('numDaysToPlan');
+    const menusTitle = document.getElementById('menusTitle');
+    const geminiStatusDot = document.getElementById('geminiStatusDot');
+    const geminiStatusMsg = document.getElementById('geminiStatusMsg');
 
-    // ---------- ESTADO ----------
-    let allCards = [];
-    let filteredCards = [];
-    let currentIndex = 0;
-    let currentFilter = 'todos';
-    const LS_KEY = 'mmx_mitobot_cards_v1';
-
-    // ---------- UTILES ----------
-    const show = el => el && el.classList.remove('hidden');
-    const hide = el => el && el.classList.add('hidden');
-    const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
-    const uniq = arr => [...new Set(arr)];
-    const urlLike = /(https?:\/\/|www\.)[^\s)]+/gi;
-    const stripUrls = s => typeof s === 'string' ? s.replace(urlLike,'').replace(/\(\s*\)/g,'').trim() : s;
-    const isUrlish = s => typeof s === 'string' && /(https?:\/\/|www\.)/i.test(s);
-
-    // --------- PARSEO ROBUSTO DEL TEXTO DEL MODELO ---------
-    function parseCandidateJSON(text, userQuery){
-      let t = (typeof text === 'string' ? text : '').trim();
-      if (t.startsWith('```')) t = t.replace(/^```(?:json)?\s*/i, '').replace(/```$/,'').trim();
-
-      // 1) JSON directo
-      try { return JSON.parse(t); } catch {}
-
-      // 2) Array toplevel -> 1er objeto
-      if (t.startsWith('[')) {
-        try {
-          const a = JSON.parse(t);
-          if (Array.isArray(a) && a.length && typeof a[0] === 'object') return a[0];
-        } catch {}
-      }
-
-      // 3) Extraer objeto balanceado { ... }
-      const start = t.indexOf('{');
-      if (start >= 0) {
-        let depth = 0, inStr = false, esc = false, end = -1;
-        for (let i = start; i < t.length; i++){
-          const ch = t[i];
-          if (inStr){
-            if (esc) esc = false;
-            else if (ch === '\\') esc = true;
-            else if (ch === '"') inStr = false;
-          } else {
-            if (ch === '"') inStr = true;
-            else if (ch === '{') depth++;
-            else if (ch === '}'){ depth--; if (depth === 0){ end = i; break; } }
-          }
-        }
-        if (end !== -1) {
-          try { return JSON.parse(t.slice(start, end + 1)); } catch {}
-        }
-      }
-
-      // 4) Fallback sin romper la UI (mensaje no técnico)
-      return {
-        myth: stripUrls(userQuery || ''),
-        isTrue: false,
-        explanation_simple: 'No he podido estructurar bien la respuesta. Prueba a formular la afirmación de forma más concreta.',
-        explanation_expert: 'La respuesta técnica no se ha podido organizar del todo bien; se muestra un resumen conservador basado en la evidencia disponible.',
-        evidenceLevel: 'Baja',
-        sources: [],
-        category: '',
-        relatedMyths: []
-      };
+    // Cálculo de kcal
+    function calculateCalories() {
+      const p = +targetProteinInput.value || 0;
+      const f = +targetFatInput.value || 0;
+      const c = +targetCarbsInput.value || 0;
+      totalCaloriesElement.textContent = Math.round(p*4 + c*4 + f*9).toLocaleString('es-ES');
     }
 
-    // ---------- API ----------
-    async function fetchApiResponse(userQuery) {
-      show(loader);
-      try {
-        const res = await fetch('/.netlify/functions/verifyMyth', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userQuery })
-        });
+    // Marcar estado Gemini (verde tras primera respuesta 2xx)
+    function markGeminiOk() {
+      geminiStatusDot.style.background = '#16a34a';
+      geminiStatusMsg.textContent = 'conectado y operativo';
+    }
+    function markGeminiError(msg) {
+      geminiStatusDot.style.background = '#ef4444';
+      geminiStatusMsg.textContent = msg || 'error de conexión';
+    }
 
-        const rawText = await res.text();
+    // Sanitización algo más robusta del HTML devuelto
+    function safeHTML(s = '') {
+      // Elimina bloques <script> y atributos on...
+      return s
+        .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+        .replace(/\son\w+="[^"]*"/gi, '')
+        .replace(/\son\w+='[^']*'/gi, '');
+    }
 
-        // Si la función devuelve error estructurado pero con status 200, lo gestionamos aquí
-        if (!res.ok) {
-          // Intentamos detectar explícitamente casos de sobrecarga por si algún día pasan
-          if (rawText && /model is overloaded/i.test(rawText)) {
-            // Fallback suave para no romper la experiencia
-            return {
-              myth: stripUrls(userQuery || ''),
-              isTrue: false,
-              explanation_simple: 'Ahora mismo el modelo de IA está saturado. Inténtalo de nuevo en unos minutos.',
-              explanation_expert: 'La llamada a la API ha devuelto un error de saturación (“model overloaded”).',
-              evidenceLevel: 'Baja',
-              sources: [],
-              category: 'Saturación',
-              relatedMyths: []
-            };
-          }
-          throw new Error(`Error en el servidor: ${res.status} - ${rawText}`);
-        }
+    const daysOfWeek = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
 
-        // Si todo va bien, parseamos como JSON
-        const data = rawText ? JSON.parse(rawText) : {};
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text) {
-          // Incluso si viene vacío, devolvemos fallback; no rompemos UX
-          return parseCandidateJSON('', userQuery);
-        }
-        return parseCandidateJSON(text, userQuery);
-      } finally {
-        hide(loader);
+    // Nombres de comidas según número de ingestas
+    function getMealNames(numMeals) {
+      switch (numMeals) {
+        case 1:
+          return ['Comida única'];
+        case 2:
+          return ['Almuerzo fuerte','Cena ligera'];
+        case 3:
+          return ['Desayuno','Comida','Cena'];
+        case 4:
+          return ['Desayuno','Comida','Cena','Snack'];
+        case 5:
+          return ['Desayuno','Media mañana','Comida','Merienda','Cena'];
+        case 6:
+          return ['Desayuno','Media mañana','Comida','Merienda','Cena','Snack noche'];
+        default:
+          return ['Comida'];
       }
     }
 
-    // ---------- VALIDACIÓN ----------
-    function isCardDataValid(d){
-      return d && typeof d.myth==='string' && typeof d.isTrue==='boolean'
-        && typeof d.explanation_simple==='string' && typeof d.explanation_expert==='string'
-        && typeof d.evidenceLevel==='string';
+    function buildSimplePlan() {
+      const p = +targetProteinInput.value || 0;
+      const f = +targetFatInput.value || 0;
+      const c = +targetCarbsInput.value || 0;
+      const numDays = +numDaysToPlanSelector.value || 7;
+      const numMeals = +numMealsSelector.value || 4;
+
+      const baseMealNames = getMealNames(numMeals);
+
+      const plan = { days: [] };
+      for (let d = 0; d < numDays; d++) {
+        const meals = baseMealNames.map(n => ({
+          name: n,
+          targetMacros: {
+            p: p / baseMealNames.length,
+            f: f / baseMealNames.length,
+            c: c / baseMealNames.length
+          },
+          option1: { description:`${n}: propuesta base`, totalMacros:{p:0,f:0,c:0}, foods:[] },
+          option2: { description:`Alternativa: ${n}`, totalMacros:{p:0,f:0,c:0}, foods:[] }
+        }));
+        plan.days.push({ day: daysOfWeek[d % 7], meals });
+      }
+      return plan;
     }
 
-    // ---------- UI: Evidenciómetro y evidencia ----------
-    function createEvidenciometroHTML(level){
-      const L = (level || '').toLowerCase();
-      const filled = L.includes('alta') ? 3 : L.includes('moderada') ? 2 : 1;
-      const label  = filled === 3 ? 'Alta' : filled === 2 ? 'Moderada' : 'Baja';
-
-      const colorClass =
-        filled === 3 ? 'bg-emerald-500' :
-        filled === 2 ? 'bg-amber-400' :
-                        'bg-rose-500';
-
-      const labelColor =
-        filled === 3 ? 'text-emerald-700' :
-        filled === 2 ? 'text-amber-700' :
-                        'text-rose-700';
-
-      const badgeBg =
-        filled === 3 ? 'bg-emerald-50' :
-        filled === 2 ? 'bg-amber-50' :
-                        'bg-rose-50';
-
-      const dots = [1,2,3].map(i => {
-        const active = i <= filled;
-        return `<span class="h-3.5 w-3.5 rounded-full border ${active ? `${colorClass} border-transparent` : 'bg-slate-200 border-slate-300'} transition-all"></span>`;
-      }).join('');
-
-      return `
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2 px-2 py-1 rounded-full bg-slate-50">
-            <div class="flex items-center gap-1">
-              ${dots}
-            </div>
+    function renderPlan(plan) {
+      let html = '';
+      plan.days.forEach((day, dayIndex) => {
+        html += `
+        <div class="menu-item bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+          <h3 class="text-3xl font-extrabold text-cyan-800 border-b-4 border-cyan-400 pb-2 mb-4">${day.day}</h3>
+          <p class="text-sm text-gray-500 mb-4">Objetivo diario: P: ${targetProteinInput.value}g | G: ${targetFatInput.value}g | C: ${targetCarbsInput.value}g</p>
+          <div class="space-y-4">
+            ${day.meals.map((meal, mealIndex) => {
+              const id = `${dayIndex}-${mealIndex}`;
+              return `
+              <div class="p-4 rounded-lg bg-gray-50 border border-gray-200">
+                <h4 class="text-xl font-semibold text-gray-700">${meal.name}
+                  <span class="text-sm font-normal text-cyan-600 ml-2">(P: ${meal.targetMacros.p.toFixed(0)}g | G: ${meal.targetMacros.f.toFixed(0)}g | C: ${meal.targetMacros.c.toFixed(0)}g)</span>
+                </h4>
+                <div class="mt-2 text-gray-600">${meal.option1.description}</div>
+                <button id="btn-recipe-${id}-1" data-target-id="recipe-${id}-1-details" class="mt-3 text-xs px-3 py-1 rounded-lg text-white bg-gradient-turquesa hover:opacity-90 transition">
+                  Generar Receta IA
+                </button>
+                <div id="recipe-${id}-1-details"></div>
+              </div>`;
+            }).join('')}
           </div>
-          <span class="ml-3 text-xs font-semibold px-2 py-1 rounded-full ${badgeBg} ${labelColor} uppercase tracking-wide">${label}</span>
-        </div>
-      `;
-    }
+        </div>`;
+      });
+      menusContainer.innerHTML = html;
 
-    function asEvidenceTypeList(arr){
-      if (!Array.isArray(arr) || !arr.length) return '';
-      const safe = arr.filter(s => !isUrlish(s)).map(stripUrls).filter(Boolean);
-      if (!safe.length) return '';
-      return `<ul class="text-sm text-slate-600 list-disc list-inside space-y-1">
-        ${safe.map(s => `<li>${s}</li>`).join('')}
-      </ul>`;
-    }
-
-    // ---------- RENDER ----------
-    function createCardHTML(card, index){
-      const c = {
-        myth: stripUrls(card.myth || ''),
-        isTrue: !!card.isTrue,
-        explanation_simple: stripUrls(card.explanation_simple || ''),
-        explanation_expert: stripUrls(card.explanation_expert || ''),
-        evidenceLevel: stripUrls(card.evidenceLevel || 'Baja'),
-        sources: Array.isArray(card.sources) ? card.sources.filter(s=>!isUrlish(s)).map(stripUrls) : [],
-        category: stripUrls(card.category || ''),
-        relatedMyths: Array.isArray(card.relatedMyths) ? card.relatedMyths.filter(s=>!isUrlish(s)).map(stripUrls) : []
-      };
-
-      return `
-      <div class="carousel-item w-full p-6 md:p-8">
-        <div class="card h-full flex flex-col justify-between">
-          <div>
-            <div class="flex justify-between items-start">
-              <div class="flex-1 pr-4">
-                <p class="text-sm font-semibold text-slate-500 mb-2">Afirmación:</p>
-                <h2 class="text-xl font-bold text-slate-800 mb-6 leading-tight">"${c.myth || '—'}"</h2>
-              </div>
-              <button class="share-btn flex-shrink-0 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full p-2" onclick="shareResult(${index})" title="Copiar JSON">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z"/></svg>
-              </button>
-            </div>
-
-            <div class="flex items-center text-base font-bold py-2 px-3 rounded-lg ${c.isTrue ? "text-green-700 bg-green-100" : "text-red-700 bg-red-100"} mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="${c.isTrue ? 'M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z' : 'M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z'}" clip-rule="evenodd"/>
-              </svg>
-              <span class="tracking-wider">${c.isTrue ? "VERDADERO" : "FALSO"}</span>
-            </div>
-
-            <div class="flex items-center justify-end mb-2 text-xs font-semibold">
-              <div class="flex items-center p-1 rounded-full bg-slate-100">
-                <button class="difficulty-toggle active px-3 py-1 rounded-full" data-target="simple">Para todos</button>
-                <button class="difficulty-toggle px-3 py-1 rounded-full" data-target="expert">Experto</button>
-              </div>
-            </div>
-
-            <div class="explanation-container">
-              <p class="explanation-simple text-slate-600 leading-relaxed text-base">${c.explanation_simple || '—'}</p>
-              <p class="explanation-expert text-slate-600 leading-relaxed text-base hidden">${c.explanation_expert || '—'}</p>
-            </div>
-
-            <div class="mt-8 pt-4 border-t border-slate-200 space-y-4">
-              <div>
-                <p class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">EVIDENCIÓMETRO:</p>
-                ${createEvidenciometroHTML(c.evidenceLevel)}
-              </div>
-
-              ${c.sources && c.sources.length ? `
-                <div class="mt-4">
-                  <p class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">BASADO EN:</p>
-                  ${asEvidenceTypeList(c.sources)}
-                </div>` : ''}
-
-              ${c.relatedMyths && c.relatedMyths.length ? `
-                <div class="mt-4">
-                  <p class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">MITOS RELACIONADOS:</p>
-                  <div class="flex flex-col gap-2">
-                    ${c.relatedMyths.map(m => `<button class="related-myth-btn text-sm text-left text-slate-700 p-2 rounded-md" data-myth="${m}">- ${m}</button>`).join('')}
-                  </div>
-                </div>` : ''}
-            </div>
-          </div>
-        </div>
-      </div>`;
-    }
-
-    function renderCarousel(){
-      const count = filteredCards.length;
-      carouselTrack.innerHTML = count ? filteredCards.map((c,i)=>createCardHTML(c,i)).join('') : '';
-      if (count) {
-        hide(initialState); show(navigationControls);
-        currentIndex = clamp(currentIndex, 0, count - 1);
-        carouselTrack.style.transform = `translateX(-${currentIndex * 100}%)`;
-      } else { show(initialState); hide(navigationControls); }
-      updateCardCounter();
-    }
-
-    function updateCardCounter(){
-      const total = filteredCards.length;
-      cardCounter.textContent = total ? `${currentIndex + 1} / ${total}` : '';
-      prevBtn.disabled = currentIndex <= 0;
-      nextBtn.disabled = currentIndex >= total - 1;
-    }
-
-    function setupPagination(){
-      prevBtn.onclick = () => { currentIndex = clamp(currentIndex - 1, 0, filteredCards.length - 1); renderCarousel(); };
-      nextBtn.onclick = () => { currentIndex = clamp(currentIndex + 1, 0, filteredCards.length - 1); renderCarousel(); };
-      clearHistoryBtn.onclick = () => {
-        allCards = []; filteredCards = []; currentIndex = 0;
-        localStorage.removeItem(LS_KEY);
-        renderCarousel(); renderFilterButtons();
-      };
-    }
-
-    // ---------- FILTROS ----------
-    function renderFilterButtons(){
-      const cats = uniq(allCards.map(c => c.category).filter(Boolean));
-      const all = ['todos', ...cats];
-      filterContainer.innerHTML = `
-        <div class="flex flex-wrap gap-2">
-          ${all.map(cat=>{
-            const active = (currentFilter === cat) ? 'active' : '';
-            const label = cat.charAt(0).toUpperCase() + cat.slice(1);
-            return `<button class="filter-btn px-3 py-1 rounded-full border border-slate-200 ${active}" data-cat="${cat}">${label}</button>`;
-          }).join('')}
-        </div>
-      `;
-      filterContainer.querySelectorAll('.filter-btn').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          currentFilter = btn.dataset.cat;
-          filterContainer.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
-          btn.classList.add('active');
-          applyFilter(); currentIndex = 0; renderCarousel();
+      // Conexión de botones a la IA
+      plan.days.forEach((day, di) => {
+        day.meals.forEach((meal, mi) => {
+          const btn = document.getElementById(`btn-recipe-${di}-${mi}-1`);
+          if (btn) {
+            btn.addEventListener('click', () => generateRecipeFromAI(di, mi, 1, btn));
+          }
         });
       });
     }
 
-    function applyFilter(){
-      filteredCards = (currentFilter === 'todos')
-        ? [...allCards]
-        : allCards.filter(c => (c.category||'').toLowerCase() === currentFilter.toLowerCase());
-    }
+    function generateWeeklyPlan(useFridge) {
+      const useFridgeFlag = !!useFridge;
+      const hasFridgeText = (fridgeIngredientsInput.value || '').trim().length > 0;
 
-    function saveHistory(){ try { localStorage.setItem(LS_KEY, JSON.stringify(allCards)); } catch {} }
-    function loadHistory(){
-      try { allCards = JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { allCards = []; }
-      currentFilter = 'todos';
-      renderFilterButtons(); applyFilter(); renderCarousel(); setupPagination();
-    }
+      menusContainer.innerHTML = `
+        <div class="text-center p-8 bg-white rounded-xl shadow-inner border border-cyan-300">
+          <h3 class="text-xl font-semibold text-cyan-700">Calculando plan...</h3>
+          <p class="mt-2 text-gray-500 animate-pulse">MacroChefBot está optimizando tu semana.</p>
+        </div>`;
+      generatedMenusSection.classList.remove('hidden');
 
-    // ---------- INTERACCIÓN ----------
-    async function handleFormSubmit(query){
-      if (!query) return;
-      try {
-        const card = await fetchApiResponse(query);
-
-        // Saneado extra por si quedara alguna URL
-        card.myth = stripUrls(card.myth);
-        card.explanation_simple = stripUrls(card.explanation_simple);
-        card.explanation_expert = stripUrls(card.explanation_expert);
-        card.category = stripUrls(card.category);
-        card.sources = Array.isArray(card.sources) ? card.sources.filter(s=>!isUrlish(s)).map(stripUrls) : [];
-        card.relatedMyths = Array.isArray(card.relatedMyths) ? card.relatedMyths.filter(s=>!isUrlish(s)).map(stripUrls) : [];
-
-        // Validación mínima; si falla, ajustamos a algo seguro
-        if (!isCardDataValid(card)) {
-          card.isTrue = false;
-          card.evidenceLevel = 'Baja';
-        }
-
-        allCards.push(card);
-        currentFilter = 'todos';
-        currentIndex = allCards.length - 1;
-        saveHistory(); renderFilterButtons(); applyFilter(); renderCarousel();
-        mythInput.value = '';
-      } catch (err) {
-        allCards.push({
-          myth: stripUrls(query), isTrue:false,
-          explanation_simple:'Error al consultar el verificador.',
-          explanation_expert:String(err?.message || err),
-          evidenceLevel:'Baja', sources:[], category:'Error', relatedMyths:[]
-        });
-        currentFilter = 'todos'; currentIndex = allCards.length - 1;
-        saveHistory(); renderFilterButtons(); applyFilter(); renderCarousel();
+      if (useFridgeFlag && hasFridgeText) {
+        menusTitle.textContent = `Plan de ${+numDaysToPlanSelector.value} días usando tu nevera`;
+      } else {
+        menusTitle.textContent = `Plan de ${+numDaysToPlanSelector.value} días sugerido`;
       }
+
+      const plan = buildSimplePlan();
+      currentPlanData = plan;
+      renderPlan(plan);
     }
 
-    function handleCardClick(e){
-      const btn = e.target.closest('.difficulty-toggle');
-      if (btn){
-        const card = e.target.closest('.carousel-item'); if (!card) return;
-        card.querySelectorAll('.difficulty-toggle').forEach(b=>b.classList.remove('active'));
-        btn.classList.add('active');
-        const showExpert = (btn.dataset.target === 'expert');
-        const simple = card.querySelector('.explanation-simple');
-        const expert = card.querySelector('.explanation-expert');
-        if (showExpert){ simple.classList.add('hidden'); expert.classList.remove('hidden'); }
-        else { expert.classList.add('hidden'); simple.classList.remove('hidden'); }
+    // --------------- Llamada a Gemini vía Netlify Function ---------------
+    async function callGeminiViaNetlify({ prompt, maxTokens = 600 }) {
+      const res = await fetch('/.netlify/functions/verifymyth', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({ prompt, maxTokens })
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(()=> '');
+        throw new Error(`HTTP ${res.status} — ${txt || 'error en función'}`);
+      }
+      const data = await res.json();
+      return data.text || '';
+    }
+
+    // Generar receta para una comida concreta con IA
+    async function generateRecipeFromAI(dayIndex, mealIndex, optionNumber, buttonElement) {
+      const recipeDetailsId = buttonElement.getAttribute('data-target-id');
+      const recipeDetailsDiv = document.getElementById(recipeDetailsId);
+      if (!currentPlanData) {
+        recipeDetailsDiv.innerHTML = '<p class="text-center text-red-500 font-semibold">Error: datos del plan no encontrados. Genera el menú de nuevo.</p>';
         return;
       }
-      const rel = e.target.closest('.related-myth-btn');
-      if (rel){ const q = rel.dataset.myth || rel.textContent.replace(/^- /,'').trim(); if (q) handleFormSubmit(q); }
-    }
+      const meal = currentPlanData.days[dayIndex].meals[mealIndex];
+      const macros = meal.targetMacros;
+      const userFridge = (fridgeIngredientsInput.value || '').trim();
+      const dietary = (dietaryFilterInput.value || '').trim();
 
-    async function shareResult(index){
-      const card = filteredCards[index]; if (!card) return;
-      const json = JSON.stringify(card, null, 2);
+      const userPrompt = `
+Eres MacroChefBot. Genera UNA receta breve y sabrosa en español (HTML simple sin <script>, con <h5>, <ul>, <ol>), basada en:
+- Comida: "${meal.name}"
+- Macros objetivo aproximados: Proteína ${macros.p.toFixed(0)} g; Grasas ${macros.f.toFixed(0)} g; Carbohidratos ${macros.c.toFixed(0)} g.
+- Prioriza ingredientes si el usuario indica nevera: ${userFridge || 'no especificado'}.
+- Restricciones dietéticas: ${dietary || 'ninguna'}.
+
+Devuelve exactamente esta estructura:
+<h5>Título</h5>
+<div class="text-xs text-gray-500">tiempo y dificultad</div>
+<h6>Ingredientes</h6>
+<ul><li>ingrediente — cantidad sugerida</li>...</ul>
+<h6>Elaboración</h6>
+<ol><li>paso corto...</li>...</ol>
+
+Evita afirmaciones sanitarias, omite riesgos y alérgenos salvo sustituciones simples. Ajusta cantidades aproximadas para acercarte a los macros.
+`.trim();
+
+      buttonElement.textContent = '🤖 Generando con Gemini...';
+      buttonElement.disabled = true;
+      recipeDetailsDiv.innerHTML = '<p class="text-center text-cyan-700 animate-pulse font-semibold">Creando receta…</p>';
+
       try {
-        await navigator.clipboard.writeText(json);
-        const btn = document.querySelectorAll('.share-btn')[index];
-        if (btn){ btn.classList.add('copied'); setTimeout(()=>btn.classList.remove('copied'), 900); }
-      } catch {}
+        const html = await callGeminiViaNetlify({ prompt: userPrompt, maxTokens: 700 });
+        recipeDetailsDiv.innerHTML = `<div class="p-4 bg-cyan-100 rounded-lg shadow-inner mt-3 border border-cyan-300">${safeHTML(html)}</div>`;
+        markGeminiOk();
+        buttonElement.textContent = 'Receta generada (ver)';
+      } catch (err) {
+        markGeminiError('falló la llamada');
+        recipeDetailsDiv.innerHTML = `<p class="text-center text-red-500 font-semibold">Error de IA: ${safeHTML(err.message)}</p>`;
+        buttonElement.textContent = 'Reintentar';
+      } finally {
+        buttonElement.disabled = false;
+      }
     }
 
-    // ---------- EVENTOS ----------
-    mythForm.addEventListener('submit', (e)=>{ e.preventDefault(); handleFormSubmit(mythInput.value.trim()); });
-    document.getElementById('suggestions').querySelectorAll('.suggestion-btn').forEach(b=> b.addEventListener('click', ()=>handleFormSubmit(b.textContent.trim())));
-
-    // Micrófono (Web Speech API)
-    (function setupMic(){
-      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SR) return;
-      const rec = new SR();
-      rec.lang = 'es-ES'; rec.interimResults = false; rec.maxAlternatives = 1;
-      micBtn.addEventListener('click', ()=>{
-        if (micBtn.classList.contains('is-listening')) { rec.stop(); return; }
-        micBtn.classList.add('is-listening'); rec.start();
-      });
-      rec.onresult = (e)=>{ const tx = e.results[0][0].transcript || ''; if (tx) { mythInput.value = tx; handleFormSubmit(tx); } };
-      rec.onend = ()=> micBtn.classList.remove('is-listening');
-      rec.onerror = ()=> micBtn.classList.remove('is-listening');
-    })();
-
-    document.addEventListener('DOMContentLoaded', loadHistory);
-    window.handleCardClick = handleCardClick;
-    window.shareResult = shareResult;
+    // Eventos básicos
+    [targetProteinInput, targetFatInput, targetCarbsInput].forEach(i => i.addEventListener('input', calculateCalories));
+    document.addEventListener('DOMContentLoaded', calculateCalories);
+    generateMenusBtn.addEventListener('click', () => generateWeeklyPlan(false));
+    generateFridgeBtn.addEventListener('click', () => generateWeeklyPlan(true));
   </script>
 </body>
 </html>
