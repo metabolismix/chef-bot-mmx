@@ -20,9 +20,9 @@ exports.handler = async function (event, context) {
   }
 
   // ---------- UTILIDAD RESPUESTA ESTÁNDAR ----------
-  const makeCardResponse = (card, extraHeaders = {}) => {
+  const makeCardResponse = (card) => {
     const safe = {
-      // modo: "recipe" | "week"
+      // Modo: "recipe" o "week"
       mode: card.mode === "week" ? "week" : "recipe",
 
       // ---- Campos de receta individual ----
@@ -82,10 +82,131 @@ exports.handler = async function (event, context) {
       headers: {
         ...cors,
         "Content-Type": "application/json",
-        "x-chefbot-func-version": "v1-chefbot-2025-11-17",
-        ...extraHeaders,
+        "x-chefbot-func-version": "v2-chefbot-2025-11-17",
       },
       body: JSON.stringify(result),
+    };
+  };
+
+  // ---------- UTILIDADES DE PARSEO ----------
+  const stripFences = (t) => {
+    if (!t || typeof t !== "string") return "";
+    let x = t.trim();
+    if (x.startsWith("```")) {
+      x = x.replace(/^```(?:json)?\s*/i, "").replace(/```$/, "");
+    }
+    return x.trim();
+  };
+
+  const robustParse = (text) => {
+    if (!text || typeof text !== "string") return null;
+    const t = text.trim();
+    if (!t) return null;
+
+    // 1) intento directo
+    try {
+      return JSON.parse(t);
+    } catch {}
+
+    // 2) array raíz -> primer objeto
+    if (t.startsWith("[")) {
+      try {
+        const a = JSON.parse(t);
+        if (Array.isArray(a) && a.length && typeof a[0] === "object") {
+          return a[0];
+        }
+      } catch {}
+    }
+
+    // 3) extraer bloque { ... } balanceado
+    const start = t.indexOf("{");
+    if (start >= 0) {
+      let depth = 0;
+      let inStr = false;
+      let esc = false;
+      for (let i = start; i < t.length; i++) {
+        const ch = t[i];
+        if (inStr) {
+          if (esc) {
+            esc = false;
+          } else if (ch === "\\") {
+            esc = true;
+          } else if (ch === '"') {
+            inStr = false;
+          }
+        } else {
+          if (ch === '"') inStr = true;
+          else if (ch === "{") depth++;
+          else if (ch === "}") {
+            depth--;
+            if (depth === 0) {
+              const snippet = t.slice(start, i + 1);
+              try {
+                return JSON.parse(snippet);
+              } catch {}
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    return null;
+  };
+
+  const buildFallbackRecipe = (mode, payload, reason) => {
+    if (mode === "week") {
+      return {
+        mode: "week",
+        plan_name: "Plan semanal simplificado",
+        days: [],
+        shopping_list: [],
+        general_tips: [
+          "No he podido estructurar correctamente el plan semanal a partir de la respuesta de la IA.",
+          reason ||
+            "Se ha generado un plan de respaldo mínimo para no interrumpir la experiencia de uso.",
+        ],
+        warnings: [],
+      };
+    }
+
+    const ingText = (payload && payload.ingredientsText) || "";
+    const items = ingText
+      ? ingText
+          .split(/[,\n]/)
+          .map((x) => x.trim())
+          .filter(Boolean)
+      : ["Ingredientes que ya tienes a mano"];
+
+    return {
+      mode: "recipe",
+      recipe_name: "Receta simplificada",
+      prep_minutes: 0,
+      cook_minutes: 0,
+      difficulty: "Fácil",
+      servings: (payload && payload.servings) || 1,
+      ingredients: items.map((name) => ({
+        name,
+        quantity_grams: null,
+        notes: "",
+      })),
+      steps: [
+        "Prepara una comida sencilla utilizando los ingredientes que ya tienes a mano.",
+        "Cuando la configuración del servidor esté corregida, vuelve a intentar generar una receta con IA.",
+      ],
+      meal_summary:
+        "No he podido estructurar la respuesta de la IA, así que te propongo una receta simplificada basada en los ingredientes.",
+      warnings: [
+        reason ||
+          "La respuesta original del modelo no se ha podido convertir a un JSON válido.",
+        "Se ha generado una receta de respaldo para no interrumpir la experiencia de uso.",
+      ],
+      macro_estimate: {
+        calories: null,
+        protein_g: null,
+        carbs_g: null,
+        fat_g: null,
+      },
     };
   };
 
@@ -98,49 +219,17 @@ exports.handler = async function (event, context) {
         ? parsedBody.payload
         : {};
 
-    // payload mínimo para no devolver recetas "a ciegas"
-    const baseText = (payload.ingredientsText || payload.notes || "").trim();
-    if (!baseText && mode === "recipe") {
-      return {
-        statusCode: 400,
-        headers: { ...cors, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          error:
-            'Faltan datos mínimos para generar la receta. Añade al menos algunos ingredientes en "Ingredientes disponibles".',
-        }),
-      };
-    }
-
-    // ---------- API KEY ----------
     const GEMINI_API_KEY = process.env.GOOGLE_API_KEY;
     if (!GEMINI_API_KEY) {
-      // Mensaje amable si la clave no está configurada en Netlify
-      return makeCardResponse({
+      // Fallback si falta la API key
+      const fb = buildFallbackRecipe(
         mode,
-        recipe_name: "Receta simplificada",
-        prep_minutes: 0,
-        cook_minutes: 0,
-        difficulty: "Fácil",
-        servings: payload.servings || 1,
-        ingredients: [
-          {
-            name: "Ingredientes introducidos por el usuario",
-            quantity_grams: null,
-            notes: "No se ha configurado GOOGLE_API_KEY en el servidor.",
-          },
-        ],
-        steps: [
-          "Añade la variable de entorno GOOGLE_API_KEY en la configuración de Netlify.",
-          "Vuelve a desplegar el proyecto y prueba de nuevo a generar la receta.",
-        ],
-        warnings: [
-          "Falta GOOGLE_API_KEY en las variables de entorno del servidor.",
-          "Es necesario configurar la clave de la API de Gemini antes de poder usar el modelo.",
-        ],
-      });
+        payload,
+        "Falta GOOGLE_API_KEY en las variables de entorno del servidor."
+      );
+      return makeCardResponse(fb);
     }
 
-    // ---------- CONFIG GEMINI ----------
     const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
     const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
@@ -153,11 +242,9 @@ Hay dos modos:
 1) "recipe"  -> una receta individual detallada.
 2) "week"    -> un plan semanal simple.
 
-Respeta SIEMPRE el esquema JSON que se define por la propiedad "responseSchema" de la llamada. No inventes campos nuevos.
-
 REGLAS IMPORTANTES:
 - No añadas texto fuera del JSON.
-- No uses comentarios, ni \`//\`, ni bloques tipo \`\`\`json.
+- No uses comentarios, ni //, ni bloques tipo \`\`\`json.
 - Si la información nutricional no es fiable, deja los campos de macros en null.
 - No hagas recomendaciones médicas; limítate a cocina y organización de comidas.
 `;
@@ -199,6 +286,10 @@ REGLAS IMPORTANTES:
           },
         },
         warnings: { type: "array", items: { type: "string" } },
+        plan_name: { type: "string" }, // tolerado, aunque no se use
+        days: { type: "array" },
+        shopping_list: { type: "array" },
+        general_tips: { type: "array" },
       },
       required: ["mode", "recipe_name", "prep_minutes", "cook_minutes", "difficulty", "ingredients", "steps"],
     };
@@ -232,13 +323,17 @@ REGLAS IMPORTANTES:
         },
         shopping_list: { type: "array", items: { type: "string" } },
         general_tips: { type: "array", items: { type: "string" } },
+        // campos de receta tolerados pero no obligatorios
+        recipe_name: { type: "string" },
+        ingredients: { type: "array" },
+        steps: { type: "array" },
+        warnings: { type: "array" },
       },
       required: ["mode", "plan_name", "days"],
     };
 
     const responseSchema = mode === "week" ? weekSchema : recipeSchema;
 
-    // Texto que verá el modelo con los datos reales
     const userPrompt = `
 MODO: ${mode}
 
@@ -265,14 +360,13 @@ Recuerda: responde SOLO con un JSON válido que cumpla el esquema.
       },
     };
 
-    // ---------- LLAMADA A GEMINI (SENCILLA, CON TIMEOUT) ----------
+    // ---------- LLAMADA A GEMINI ----------
     const TIMEOUT_MS = parseInt(process.env.GEMINI_TIMEOUT_MS || "8000", 10);
-
-    let result;
-    let res;
-
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+    let res;
+    let result;
 
     try {
       res = await fetch(API_URL, {
@@ -283,170 +377,107 @@ Recuerda: responde SOLO con un JSON válido que cumpla el esquema.
       });
     } catch (err) {
       clearTimeout(timeoutId);
-      // Error de red o timeout: devolvemos receta/plán simplificado
-      if (mode === "week") {
-        return makeCardResponse({
-          mode: "week",
-          plan_name: "Plan semanal simplificado",
-          days: [],
-          shopping_list: [],
-          general_tips: [
-            "Ha habido un problema de conexión con el servicio de IA.",
-            "Organiza la semana reutilizando tus recetas habituales y vuelve a intentarlo más tarde.",
-          ],
-          warnings: [
-            "La llamada a la API de Gemini ha fallado o ha excedido el tiempo máximo.",
-          ],
-        });
-      }
-
-      return makeCardResponse({
-        mode: "recipe",
-        recipe_name: "Receta simplificada",
-        prep_minutes: 0,
-        cook_minutes: 0,
-        difficulty: "Fácil",
-        servings: payload.servings || 1,
-        ingredients: [
-          {
-            name: "Ingredientes que ya tienes a mano",
-            quantity_grams: null,
-            notes:
-              "La respuesta original no se ha podido obtener por un problema de conexión.",
-          },
-        ],
-        steps: [
-          "Prepara una comida sencilla utilizando los ingredientes que ya tienes disponibles.",
-          "Cuando la conexión con el servicio de IA funcione correctamente, vuelve a intentar generar una receta con Chef-Bot.",
-        ],
-        warnings: [
-          "Ha habido un problema de conexión con el servicio de IA.",
-        ],
-      });
-    } finally {
-      clearTimeout(timeoutId);
+      const fb = buildFallbackRecipe(
+        mode,
+        payload,
+        "La llamada a la API de Gemini ha fallado o ha excedido el tiempo máximo configurado."
+      );
+      return makeCardResponse(fb);
     }
 
+    clearTimeout(timeoutId);
     result = await res.json().catch(() => ({}));
 
-    // Si la API responde con error HTTP, generamos fallback amable
     if (!res.ok) {
       const msg = result?.error?.message || "";
       const code = result?.error?.code || res.status || 0;
-
-      if (mode === "week") {
-        return makeCardResponse({
-          mode: "week",
-          plan_name: "Plan semanal simplificado",
-          days: [],
-          shopping_list: [],
-          general_tips: [
-            "La API de Gemini ha devuelto un error.",
-            `Código: ${code}. Mensaje: ${msg || "sin detalle"}.`,
-            "Puedes organizar tus comidas semanalmente usando tus propias recetas mientras tanto.",
-          ],
-          warnings: [
-            "La respuesta del modelo no se ha podido usar para un plan semanal completo.",
-          ],
-        });
-      }
-
-      return makeCardResponse({
-        mode: "recipe",
-        recipe_name: "Receta simplificada",
-        prep_minutes: 0,
-        cook_minutes: 0,
-        difficulty: "Fácil",
-        servings: payload.servings || 1,
-        ingredients: [
-          {
-            name: "Ingredientes que ya tienes a mano",
-            quantity_grams: null,
-            notes:
-              "La API de Gemini ha devuelto un error y no se ha podido generar la receta original.",
-          },
-        ],
-        steps: [
-          "Prepara una comida sencilla reutilizando tus ingredientes principales (por ejemplo, saltear proteína con verduras y acompañar con una fuente de hidratos).",
-          "Cuando el error de la API esté resuelto, vuelve a intentar generar una receta completa con Chef-Bot.",
-        ],
-        warnings: [
-          `Error devuelto por la API de Gemini (status ${code}): ${msg || "sin detalle"}.`,
-        ],
-      });
+      const fb = buildFallbackRecipe(
+        mode,
+        payload,
+        `La API de Gemini ha devuelto un error (código ${code}): ${msg || "sin detalle"}.`
+      );
+      return makeCardResponse(fb);
     }
 
-    // Si todo va bien, la propia API ya respeta el esquema y devuelve JSON
-    // Lo envolvemos en el formato "candidates" que espera el front-end,
-    // pero sin tocar el texto (para no introducir errores de parseo).
-    //
-    // generateContent con responseMimeType="application/json" devuelve
-    // el JSON directamente en parts[0].text.
-    const text =
-      result?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      JSON.stringify(
-        mode === "week"
-          ? {
-              mode: "week",
-              plan_name: "Plan semanal simplificado",
-              days: [],
-              shopping_list: [],
-              general_tips: [],
-            }
-          : {
-              mode: "recipe",
-              recipe_name: "Receta simplificada",
-              prep_minutes: 0,
-              cook_minutes: 0,
-              difficulty: "Fácil",
-              ingredients: [],
-              steps: [],
-            }
-      );
+    // ---------- PARSEO DE LA RESPUESTA DEL MODELO ----------
+    const rawText =
+      result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const parsed = robustParse(stripFences(rawText));
 
-    return {
-      statusCode: 200,
-      headers: {
-        ...cors,
-        "Content-Type": "application/json",
-        "x-chefbot-func-version": "v1-chefbot-2025-11-17",
-      },
-      body: JSON.stringify({
-        candidates: [
-          {
-            content: {
-              parts: [{ text }],
-            },
-          },
-        ],
-      }),
-    };
-  } catch (error) {
-    // ---------- EXCEPCIÓN INTERNA NO ESPERADA ----------
-    return makeCardResponse({
+    if (!parsed || typeof parsed !== "object") {
+      const fb = buildFallbackRecipe(
+        mode,
+        payload,
+        "La respuesta original del modelo no se ha podido convertir a un JSON válido."
+      );
+      return makeCardResponse(fb);
+    }
+
+    // Normalización suave:
+    if (mode === "week") {
+      const plan = {
+        mode: "week",
+        plan_name: parsed.plan_name || "Plan semanal",
+        days: Array.isArray(parsed.days) ? parsed.days : [],
+        shopping_list: Array.isArray(parsed.shopping_list)
+          ? parsed.shopping_list
+          : [],
+        general_tips: Array.isArray(parsed.general_tips)
+          ? parsed.general_tips
+          : [],
+        warnings: Array.isArray(parsed.warnings) ? parsed.warnings : [],
+      };
+      return makeCardResponse(plan);
+    }
+
+    // mode === "recipe"
+    const recipe = {
       mode: "recipe",
-      recipe_name: "Receta simplificada",
-      prep_minutes: 0,
-      cook_minutes: 0,
-      difficulty: "Fácil",
-      servings: (parsedBody && parsedBody.payload && parsedBody.payload.servings) || 1,
-      ingredients: [
-        {
-          name: "Ingredientes que ya tienes a mano",
-          quantity_grams: null,
-          notes:
-            "Ha ocurrido un problema interno en la función del servidor y no se ha podido obtener la receta original.",
-        },
-      ],
-      steps: [
-        "Prepara una comida sencilla utilizando los ingredientes que ya tienes disponibles.",
-        "Cuando el problema esté solucionado, vuelve a intentar generar una receta con Chef-Bot.",
-      ],
-      warnings: [
-        `Excepción interna en la función del servidor: ${
-          error?.message || String(error)
-        }`,
-      ],
-    });
+      recipe_name: parsed.recipe_name || "Receta sin título",
+      prep_minutes:
+        typeof parsed.prep_minutes === "number" ? parsed.prep_minutes : 0,
+      cook_minutes:
+        typeof parsed.cook_minutes === "number" ? parsed.cook_minutes : 0,
+      difficulty: parsed.difficulty || "Fácil",
+      servings:
+        typeof parsed.servings === "number" && parsed.servings > 0
+          ? parsed.servings
+          : (payload.servings || 1),
+      meal_type: parsed.meal_type || payload.mealType || "Comida",
+      ingredients: Array.isArray(parsed.ingredients) ? parsed.ingredients : [],
+      steps: Array.isArray(parsed.steps) ? parsed.steps : [],
+      meal_summary: parsed.meal_summary || "",
+      macro_estimate:
+        typeof parsed.macro_estimate === "object" && parsed.macro_estimate !== null
+          ? parsed.macro_estimate
+          : {
+              calories: null,
+              protein_g: null,
+              carbs_g: null,
+              fat_g: null,
+            },
+      warnings: Array.isArray(parsed.warnings) ? parsed.warnings : [],
+    };
+
+    // Si se queda sin ingredientes/pasos, preferimos mandar fallback para no romper UX
+    if (!recipe.ingredients.length || !recipe.steps.length) {
+      const fb = buildFallbackRecipe(
+        mode,
+        payload,
+        "La respuesta de la IA no incluía suficientes ingredientes o pasos estructurados."
+      );
+      return makeCardResponse(fb);
+    }
+
+    return makeCardResponse(recipe);
+  } catch (error) {
+    const fb = buildFallbackRecipe(
+      "recipe",
+      null,
+      `Se produjo una excepción interna en la función del servidor: ${
+        error?.message || String(error)
+      }.`
+    );
+    return makeCardResponse(fb);
   }
 };
