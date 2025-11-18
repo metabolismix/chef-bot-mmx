@@ -872,7 +872,7 @@ exports.handler = async function (event, context) {
   }
 
   // ---------- LLAMADA A GEMINI ----------
-  const MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+  const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
   const systemPrompt = `
@@ -1079,3 +1079,4 @@ Genera un único menú de 1 día que siga las reglas anteriores y el formato JSO
 
   return buildResponse(planFromAi, 'v3-chefbot-ai-ok');
 };
+
