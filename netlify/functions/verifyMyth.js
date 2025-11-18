@@ -66,7 +66,7 @@ exports.handler = async function (event, context) {
         : [],
     };
 
-    // IMPORTANTE: mantenemos este formato tipo "candidates" porque tu frontend ya lo espera así
+    // Empaquetamos en formato tipo Gemini porque tu frontend ya lo espera así
     const text = JSON.stringify(safe);
     const result = {
       candidates: [
@@ -83,7 +83,7 @@ exports.handler = async function (event, context) {
       headers: {
         ...cors,
         "Content-Type": "application/json",
-        "x-chefbot-func-version": "v2-chefbot-2025-11-18",
+        "x-chefbot-func-version": "v2-chefbot-2025-11-18b",
       },
       body: JSON.stringify(result),
     };
@@ -286,7 +286,7 @@ REGLAS IMPORTANTES:
           },
         },
         warnings: { type: "array", items: { type: "string" } },
-        plan_name: { type: "string" }, // tolerado, aunque no se use
+        plan_name: { type: "string" },
         days: { type: "array" },
         shopping_list: { type: "array" },
         general_tips: { type: "array" },
@@ -331,8 +331,6 @@ REGLAS IMPORTANTES:
         },
         shopping_list: { type: "array", items: { type: "string" } },
         general_tips: { type: "array", items: { type: "string" } },
-
-        // campos de receta tolerados pero no obligatorios
         recipe_name: { type: "string" },
         ingredients: { type: "array" },
         steps: { type: "array" },
@@ -350,8 +348,8 @@ DATOS DEL USUARIO (JSON):
 ${JSON.stringify(payload, null, 2)}
 
 Objetivo:
-- Si el modo es "recipe", genera una RECETA CONCRETA en español, sencilla y realista, respetando en lo posible sus preferencias, restricciones y macros objetivo, con marcado carácter de dieta mediterránea.
-- Si el modo es "week", genera un PLAN SEMANAL resumen con varios platos por día (no hace falta dar el paso a paso completo, solo títulos y descripciones breves) siguiendo patrones de dieta mediterránea y respetando macros objetivos globales.
+- Si el modo es "recipe", genera una RECETA CONCRETA en español, sencilla y realista, con carácter de dieta mediterránea, respetando en lo posible sus preferencias, restricciones y macros objetivo.
+- Si el modo es "week", genera un PLAN SEMANAL con varios platos por día (títulos y descripciones breves) siguiendo patrones de dieta mediterránea y respetando los macros objetivo globales.
 
 Recuerda: responde SOLO con un JSON válido que cumpla el esquema.
 `;
@@ -370,7 +368,6 @@ Recuerda: responde SOLO con un JSON válido que cumpla el esquema.
     };
 
     // ---------- LLAMADA A GEMINI ----------
-    // Subimos el timeout interno a 9000 ms por defecto (configurable)
     const TIMEOUT_MS = parseInt(
       process.env.GEMINI_TIMEOUT_MS || "9000",
       10
@@ -390,8 +387,6 @@ Recuerda: responde SOLO con un JSON válido que cumpla el esquema.
       });
     } catch (err) {
       clearTimeout(timeoutId);
-
-      // Log para ver el error en los logs de Netlify
       console.error("Error al llamar a la API de Gemini:", err);
 
       const isTimeout = err && err.name === "AbortError";
@@ -409,9 +404,10 @@ Recuerda: responde SOLO con un JSON válido que cumpla el esquema.
     result = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      const msg = result && result.error && result.error.message
-        ? result.error.message
-        : "";
+      const msg =
+        result && result.error && result.error.message
+          ? result.error.message
+          : "";
       const code =
         (result && result.error && result.error.code) || res.status || 0;
 
@@ -431,20 +427,46 @@ Recuerda: responde SOLO con un JSON válido que cumpla el esquema.
     }
 
     // ---------- PARSEO DE LA RESPUESTA DEL MODELO ----------
-    const rawText =
+    const firstPart =
       result &&
       result.candidates &&
       result.candidates[0] &&
       result.candidates[0].content &&
       result.candidates[0].content.parts &&
-      result.candidates[0].content.parts[0] &&
-      result.candidates[0].content.parts[0].text
-        ? result.candidates[0].content.parts[0].text
-        : "";
+      result.candidates[0].content.parts[0]
+        ? result.candidates[0].content.parts[0]
+        : {};
 
-    const parsed = robustParse(stripFences(rawText));
+    let rawPayload = "";
+
+    if (typeof firstPart.text === "string" && firstPart.text.trim()) {
+      rawPayload = firstPart.text;
+    } else if (
+      firstPart.functionCall &&
+      typeof firstPart.functionCall.args === "string"
+    ) {
+      // Por si Gemini devolviera un functionCall con args en JSON string
+      rawPayload = firstPart.functionCall.args;
+    } else if (firstPart.jsonValue && typeof firstPart.jsonValue === "object") {
+      // Caso típico con responseMimeType: "application/json"
+      try {
+        rawPayload = JSON.stringify(firstPart.jsonValue);
+      } catch (e) {
+        console.error(
+          "Error al serializar jsonValue de Gemini:",
+          e && e.message ? e.message : e
+        );
+      }
+    }
+
+    const parsed = robustParse(stripFences(rawPayload));
 
     if (!parsed || typeof parsed !== "object") {
+      console.error(
+        "No se ha podido parsear la respuesta de Gemini. Respuesta completa (truncada a 1500 chars):",
+        JSON.stringify(result || {}, null, 2).slice(0, 1500)
+      );
+
       const fb = buildFallbackRecipe(
         mode,
         payload,
@@ -517,7 +539,7 @@ Recuerda: responde SOLO con un JSON válido que cumpla el esquema.
     );
 
     const fb = buildFallbackRecipe(
-      "recipe",
+      "week",
       null,
       `Se produjo una excepción interna en la función del servidor: ${
         (error && error.message) || String(error)
