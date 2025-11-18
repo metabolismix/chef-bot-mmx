@@ -19,7 +19,7 @@ exports.handler = async function (event, context) {
     };
   }
 
-  // ---------- UTILIDAD RESPUESTA ESTÁNDAR (ENVUELTA EN candidates[...] COMO AHORA) ----------
+  // ---------- UTILIDAD RESPUESTA ESTÁNDAR ----------
   const makeCardResponse = (card) => {
     const safe = {
       // Modo: "recipe" o "week"
@@ -82,7 +82,7 @@ exports.handler = async function (event, context) {
       headers: {
         ...cors,
         "Content-Type": "application/json",
-        "x-chefbot-func-version": "v2-chefbot-g1_5-flash-2025-11-18",
+        "x-chefbot-func-version": "v2-chefbot-2025-11-18-no-jsonmode",
       },
       body: JSON.stringify(result),
     };
@@ -154,22 +154,22 @@ exports.handler = async function (event, context) {
     return null;
   };
 
-  // ---------- FALLBACKS ----------
-  const buildFallbackPlan = (reason) => {
-    return {
-      mode: "week",
-      plan_name: "Plan de respaldo",
-      days: [],
-      shopping_list: [],
-      general_tips: [
-        "La IA no ha devuelto un plan estructurado completo. Se ha generado un plan mínimo de respaldo.",
-        reason || "Error genérico al llamar a la API de Gemini.",
-      ],
-      warnings: [],
-    };
-  };
+  const buildFallbackRecipe = (mode, payload, reason) => {
+    if (mode === "week") {
+      return {
+        mode: "week",
+        plan_name: "Plan de respaldo",
+        days: [],
+        shopping_list: [],
+        general_tips: [
+          "La IA no ha devuelto un plan estructurado completo. Se ha generado un plan mínimo de respaldo.",
+          reason ||
+            "Se ha generado un plan de respaldo mínimo para no interrumpir la experiencia de uso.",
+        ],
+        warnings: [],
+      };
+    }
 
-  const buildFallbackRecipe = (payload, reason) => {
     const ingText = (payload && payload.ingredientsText) || "";
     const items = ingText
       ? ingText
@@ -181,11 +181,10 @@ exports.handler = async function (event, context) {
     return {
       mode: "recipe",
       recipe_name: "Receta simplificada",
-      prep_minutes: 5,
-      cook_minutes: 10,
+      prep_minutes: 0,
+      cook_minutes: 0,
       difficulty: "Fácil",
       servings: (payload && payload.servings) || 1,
-      meal_type: (payload && payload.mealType) || "Comida",
       ingredients: items.map((name) => ({
         name,
         quantity_grams: null,
@@ -200,6 +199,7 @@ exports.handler = async function (event, context) {
       warnings: [
         reason ||
           "La respuesta original del modelo no se ha podido convertir a un JSON válido.",
+        "Se ha generado una receta de respaldo para no interrumpir la experiencia de uso.",
       ],
       macro_estimate: {
         calories: null,
@@ -212,214 +212,82 @@ exports.handler = async function (event, context) {
 
   try {
     // ---------- INPUT ----------
-    let parsedBody = {};
-    try {
-      parsedBody = JSON.parse(event.body || "{}");
-    } catch {
-      parsedBody = {};
-    }
-
-    // Soportamos dos patrones:
-    // 1) { mode, payload }  -> para plan semanal
-    // 2) { recipeRequest }  -> para receta individual
-    let mode = parsedBody.mode === "week" ? "week" : "recipe";
-
-    let payload = null;
-    if (mode === "week" && parsedBody && typeof parsedBody.payload === "object") {
-      payload = parsedBody.payload;
-    } else if (parsedBody && typeof parsedBody.recipeRequest === "object") {
-      mode = "recipe";
-      payload = parsedBody.recipeRequest;
-    }
-
-    if (typeof payload !== "object" || payload === null) {
-      payload = {};
-    }
+    const parsedBody = JSON.parse(event.body || "{}");
+    const mode = parsedBody.mode === "week" ? "week" : "recipe";
+    const payload =
+      typeof parsedBody.payload === "object" && parsedBody.payload !== null
+        ? parsedBody.payload
+        : {};
 
     const GEMINI_API_KEY = process.env.GOOGLE_API_KEY;
     if (!GEMINI_API_KEY) {
-      const fb =
-        mode === "week"
-          ? buildFallbackPlan(
-              "Falta GOOGLE_API_KEY en las variables de entorno del servidor."
-            )
-          : buildFallbackRecipe(
-              payload,
-              "Falta GOOGLE_API_KEY en las variables de entorno del servidor."
-            );
+      const fb = buildFallbackRecipe(
+        mode,
+        payload,
+        "Falta GOOGLE_API_KEY en las variables de entorno del servidor."
+      );
       return makeCardResponse(fb);
     }
 
-    // ---------- MODELO: GEMINI 1.5 FLASH ----------
-    const MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+    // Volvemos a un modelo que ya sabíamos que existía en tu proyecto
+    const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
     const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
-    // ---------- PROMPTS ----------
     const systemPrompt = `
 Actúas como CHEF-BOT, un asistente de cocina en español.
 
-Tu misión:
-- Generar planes de comidas y recetas realistas, sencillas y coherentes con la dieta mediterránea.
-- Ajustar lo mejor posible los macronutrientes objetivo (proteínas, grasas, carbohidratos).
-- Respetar SIEMPRE:
-  - Restricciones dietéticas indicadas (alergias, intolerancias, preferencias).
-  - Ingredientes disponibles en la nevera cuando se proporcionan.
-- No inventar platos absurdos (ej: gambas con leche de almendras para merendar, atún con plátano y espinacas para desayunar, etc.).
+Tu tarea es generar SIEMPRE una respuesta en formato JSON ESTRICTO, sin texto adicional, sin backticks y sin explicaciones fuera del JSON.
 
-Formato de salida:
-- Debes responder SIEMPRE con UN ÚNICO JSON VÁLIDO.
-- Sin texto fuera del JSON.
-- Sin backticks.
-- Sin comentarios.
-- Sin campos sorpresa fuera de los descritos.
+Hay dos modos:
+1) "recipe"  -> una receta individual detallada.
+2) "week"    -> un plan semanal simple.
 
-Para modo "week" (plan semanal), un ejemplo de estructura que debes imitar es:
-{
-  "mode": "week",
-  "plan_name": "Plan semanal ajustado a tus macros",
-  "days": [
-    {
-      "day_name": "Lunes",
-      "meals": [
-        {
-          "meal_type": "Desayuno",
-          "recipe_name": "Tostadas integrales con aguacate y huevo",
-          "short_description": "Desayuno rico en proteína y grasa saludable con pan integral, aguacate y huevo."
-        }
-      ]
-    }
-  ],
-  "shopping_list": ["pan integral", "aguacate", "huevos"],
-  "general_tips": [
-    "Consejo general sobre organización del batch cooking, hidratación, etc."
-  ],
-  "warnings": [
-    "Alguna advertencia relevante si procede."
-  ]
-}
-
-Para modo "recipe", un ejemplo de estructura que debes imitar es:
-{
-  "mode": "recipe",
-  "recipe_name": "Pechuga de pollo a la plancha con patata y ensalada",
-  "prep_minutes": 10,
-  "cook_minutes": 15,
-  "difficulty": "Fácil",
-  "servings": 1,
-  "meal_type": "Almuerzo",
-  "ingredients": [
-    { "name": "pechuga de pollo", "quantity_grams": 150, "notes": "a la plancha" },
-    { "name": "patata cocida", "quantity_grams": 200, "notes": "en dados" },
-    { "name": "ensalada mixta", "quantity_grams": 80, "notes": "lechuga, tomate, cebolla" }
-  ],
-  "steps": [
-    "Paso 1...",
-    "Paso 2..."
-  ],
-  "meal_summary": "Resumen corto y amigable del plato.",
-  "macro_estimate": {
-    "calories": 600,
-    "protein_g": 40,
-    "carbs_g": 60,
-    "fat_g": 18
-  },
-  "warnings": [
-    "Advertencias relevantes si las hay."
-  ]
-}
+REGLAS IMPORTANTES:
+- No añadas texto fuera del JSON.
+- No uses comentarios, ni //, ni bloques tipo \`\`\`json.
+- Si la información nutricional no es fiable, deja los campos de macros en null.
+- No hagas recomendaciones médicas; limítate a cocina y organización de comidas.
 `;
 
-    let userPrompt;
-    if (mode === "week") {
-      const {
-        targetProtein,
-        targetFat,
-        targetCarbs,
-        numMeals,
-        numDays,
-        dietaryFilter,
-        fridgeIngredients,
-      } = payload;
+    const userPrompt = `
+MODO: ${mode}
 
-      userPrompt = `
-MODO: week (plan semanal)
+DATOS DEL USUARIO (JSON):
+${JSON.stringify(payload, null, 2)}
 
-OBJETIVOS DIARIOS (aprox):
-- Proteína (g/día): ${targetProtein ?? "no indicado"}
-- Grasas (g/día): ${targetFat ?? "no indicado"}
-- Carbohidratos (g/día): ${targetCarbs ?? "no indicado"}
+Objetivo:
+- Si el modo es "recipe", genera una RECETA CONCRETA en español, sencilla y realista, respetando en lo posible sus preferencias, restricciones y macros objetivo.
+- Si el modo es "week", genera un PLAN SEMANAL resumen con varios platos por día (no hace falta dar el paso a paso completo, solo títulos y descripciones breves).
 
-NÚMERO DE COMIDAS AL DÍA: ${numMeals ?? "no indicado"}
-NÚMERO DE DÍAS A PLANIFICAR: ${numDays ?? "no indicado"}
-
-RESTRICCIONES DIETÉTICAS / PREFERENCIAS:
-${dietaryFilter || "Ninguna restricción específica."}
-
-INGREDIENTES EN LA NEVERA (para priorizar cuando tenga sentido):
-${fridgeIngredients || "No se ha especificado nada, puedes usar alimentos típicos de dieta mediterránea."}
-
-Instrucciones clave:
-- Genera un plan semanal realista de estilo mediterráneo.
-- No hagas combinaciones raras (nada de mezclas forzadas dulce-salado tipo atún con plátano).
-- Ajusta lo mejor posible los macros a nivel de día (no hace falta cuadrar al gramo cada comida, pero sí que el total del día se acerque a los objetivos).
-- Devuélvelo TODO en un único JSON siguiendo el esquema de "week".
+Recuerda: responde SOLO con un JSON válido que pueda parsearse con JSON.parse en JavaScript.
 `;
-    } else {
-      // mode === "recipe"
-      const {
-        comida,
-        descripcion,
-        ingredientes,
-        macrosObjetivo,
-        restricciones,
-        notas,
-      } = payload;
 
-      userPrompt = `
-MODO: recipe (receta individual)
+    const combinedPrompt = `${systemPrompt.trim()}
 
-TIPO DE COMIDA: ${comida || "No especificado"}
-DESCRIPCIÓN DE LA COMIDA: ${descripcion || "No especificada"}
-
-INGREDIENTES DISPONIBLES (con gramos):
-${JSON.stringify(ingredientes || [], null, 2)}
-
-MACROS OBJETIVO APROXIMADOS PARA ESTA COMIDA:
-${JSON.stringify(macrosObjetivo || {}, null, 2)}
-
-RESTRICCIONES DIETÉTICAS / PREFERENCIAS:
-${restricciones || "Ninguna restricción específica."}
-
-NOTAS ADICIONALES:
-${notas || "Sin notas adicionales."}
-
-Instrucciones clave:
-- Usa SOLO los ingredientes listados con cantidades coherentes.
-- No añadas ingredientes nuevos.
-- Respeta las restricciones dietéticas.
-- Ajusta lo mejor posible la receta a los macros objetivo.
-- Haz una receta realista, sencilla y estilo mediterráneo.
-- Devuélvelo TODO en un único JSON siguiendo el esquema de "recipe".
+-------------------------------
+INSTRUCCIONES DEL USUARIO:
+${userPrompt.trim()}
 `;
-    }
 
     const requestBody = {
       contents: [
         {
           role: "user",
-          parts: [{ text: systemPrompt + "\n\n" + userPrompt }],
+          parts: [{ text: combinedPrompt }],
         },
       ],
       generationConfig: {
         temperature: mode === "week" ? 0.5 : 0.4,
         topP: 0.9,
         topK: 32,
-        maxOutputTokens: mode === "week" ? 2048 : 1024,
+        maxOutputTokens: 2048,
+        // IMPORTANTE: Nada de response_mime_type ni response_schema aquí,
+        // porque tu endpoint v1beta no los soporta y devolvía 400.
       },
     };
 
     // ---------- LLAMADA A GEMINI ----------
-    const TIMEOUT_MS = parseInt(process.env.GEMINI_TIMEOUT_MS || "10000", 10);
+    const TIMEOUT_MS = parseInt(process.env.GEMINI_TIMEOUT_MS || "8000", 10);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -435,15 +303,11 @@ Instrucciones clave:
       });
     } catch (err) {
       clearTimeout(timeoutId);
-      const fb =
-        mode === "week"
-          ? buildFallbackPlan(
-              "La llamada a la API de Gemini ha fallado o ha excedido el tiempo máximo configurado."
-            )
-          : buildFallbackRecipe(
-              payload,
-              "La llamada a la API de Gemini ha fallado o ha excedido el tiempo máximo configurado."
-            );
+      const fb = buildFallbackRecipe(
+        mode,
+        payload,
+        "La llamada a la API de Gemini ha fallado o ha excedido el tiempo máximo configurado."
+      );
       return makeCardResponse(fb);
     }
 
@@ -453,36 +317,29 @@ Instrucciones clave:
     if (!res.ok) {
       const msg = result?.error?.message || "";
       const code = result?.error?.code || res.status || 0;
-      const fb =
-        mode === "week"
-          ? buildFallbackPlan(
-              `La API de Gemini ha devuelto un error: Gemini ${code}: ${msg || "sin detalle"}.`
-            )
-          : buildFallbackRecipe(
-              payload,
-              `La API de Gemini ha devuelto un error: Gemini ${code}: ${msg || "sin detalle"}.`
-            );
+      const fb = buildFallbackRecipe(
+        mode,
+        payload,
+        `La API de Gemini ha devuelto un error: Gemini ${code}: ${msg || "sin detalle"}.`
+      );
       return makeCardResponse(fb);
     }
 
-    // ---------- PARSEO RESPUESTA DEL MODELO ----------
+    // ---------- PARSEO DE LA RESPUESTA DEL MODELO ----------
     const rawText =
       result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
     const parsed = robustParse(stripFences(rawText));
 
     if (!parsed || typeof parsed !== "object") {
-      const fb =
-        mode === "week"
-          ? buildFallbackPlan(
-              "La respuesta original del modelo no se ha podido convertir a un JSON válido."
-            )
-          : buildFallbackRecipe(
-              payload,
-              "La respuesta original del modelo no se ha podido convertir a un JSON válido."
-            );
+      const fb = buildFallbackRecipe(
+        mode,
+        payload,
+        "La respuesta original del modelo no se ha podido convertir a un JSON válido."
+      );
       return makeCardResponse(fb);
     }
 
+    // Normalización suave:
     if (mode === "week") {
       const plan = {
         mode: "week",
@@ -511,8 +368,8 @@ Instrucciones clave:
       servings:
         typeof parsed.servings === "number" && parsed.servings > 0
           ? parsed.servings
-          : payload.servings || 1,
-      meal_type: parsed.meal_type || payload.comida || "Comida",
+          : (payload.servings || 1),
+      meal_type: parsed.meal_type || payload.mealType || "Comida",
       ingredients: Array.isArray(parsed.ingredients) ? parsed.ingredients : [],
       steps: Array.isArray(parsed.steps) ? parsed.steps : [],
       meal_summary: parsed.meal_summary || "",
@@ -531,6 +388,7 @@ Instrucciones clave:
 
     if (!recipe.ingredients.length || !recipe.steps.length) {
       const fb = buildFallbackRecipe(
+        mode,
         payload,
         "La respuesta de la IA no incluía suficientes ingredientes o pasos estructurados."
       );
@@ -539,7 +397,9 @@ Instrucciones clave:
 
     return makeCardResponse(recipe);
   } catch (error) {
-    const fb = buildFallbackPlan(
+    const fb = buildFallbackRecipe(
+      "week",
+      null,
       `Se produjo una excepción interna en la función del servidor: ${
         error?.message || String(error)
       }.`
