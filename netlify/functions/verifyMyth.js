@@ -33,7 +33,7 @@ exports.handler = async function (event, context) {
       headers: {
         ...cors,
         'Content-Type': 'application/json',
-        'x-chefbot-func-version': 'v5-chefbot-relaxed-2025-11-18'
+        'x-chefbot-func-version': 'v6-chefbot-0candidates-2025-11-18'
       },
       body: JSON.stringify(safe)
     };
@@ -402,7 +402,32 @@ No escribas nada fuera del JSON.
       });
     }
 
-    // ---------- PARSEO DE RESPUESTA CORRECTA (MODO TOLERANTE) ----------
+    // ---------- AQUÍ res.ok === true ----------
+    const pf = result?.promptFeedback || {};
+
+    // Caso CRÍTICO: 0 candidatos (lo que te está pasando ahora)
+    if (!result?.candidates || !result.candidates.length) {
+      const rawDump = JSON.stringify(result || {});
+      const snippet = rawDump.slice(0, 400) + (rawDump.length > 400 ? '…' : '');
+
+      return makePlanResponse({
+        mode,
+        plan_name: 'Plan no disponible (contenido bloqueado / sin candidatos)',
+        days: [],
+        shopping_list: [],
+        general_tips: [
+          ...DISCLAIMER_LINES,
+          'La API de Gemini ha devuelto la respuesta como correcta pero sin ningún contenido utilizable (0 candidatos).',
+          `Motivo reportado por el modelo (promptFeedback.blockReason): ${pf.blockReason || 'no especificado'}.`,
+          'Es probable que se haya aplicado alguna política de seguridad sobre esta petición.',
+          'Prueba a usar macros razonables y una descripción muy simple, sin mencionar patologías ni objetivos clínicos.',
+          `Detalle técnico bruto (recortado): ${snippet}`,
+          CONTACT_HTML
+        ]
+      });
+    }
+
+    // ---------- PARSEO TEXTUAL NORMAL ----------
     const rawText = result?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const parsed = robustParse(stripFences(rawText));
     let plan = parsed && typeof parsed === 'object' ? parsed : null;
@@ -442,7 +467,6 @@ No escribas nada fuera del JSON.
     }
 
     if (!plan || !Array.isArray(plan.days) || !plan.days.length) {
-      // Aquí es donde antes caías siempre -> ahora añadimos el JSON bruto para depurar
       return makePlanResponse({
         mode,
         plan_name: 'Plan no disponible (respuesta no válida)',
@@ -453,7 +477,7 @@ No escribas nada fuera del JSON.
           'La IA ha devuelto una respuesta que no se ajusta al formato esperado.',
           'Prueba a generar de nuevo el plan con una descripción más sencilla (por ejemplo, sin restricciones muy complejas).',
           'Si quieres que te ayudemos a diseñar un menú adaptado, puedes escribirnos desde <a href="https://metabolismix.com/contacto/" target="_blank" rel="noopener noreferrer">https://metabolismix.com/contacto/</a>.',
-          `Detalle técnico (primeros caracteres del JSON devuelto): ${rawText ? rawText.slice(0, 220) + (rawText.length > 220 ? '…' : '') : 'vacío'}`
+          `Detalle técnico (primeros caracteres del texto devuelto): ${rawText ? rawText.slice(0, 220) + (rawText.length > 220 ? '…' : '') : 'vacío'}`
         ]
       });
     }
