@@ -33,7 +33,7 @@ exports.handler = async function (event, context) {
       headers: {
         ...cors,
         'Content-Type': 'application/json',
-        'x-chefbot-func-version': 'v4-chefbot-2025-11-18'
+        'x-chefbot-func-version': 'v5-chefbot-relaxed-2025-11-18'
       },
       body: JSON.stringify(safe)
     };
@@ -102,7 +102,7 @@ exports.handler = async function (event, context) {
     return null;
   };
 
-  // ---------- DESCARGO DE RESPONSABILIDAD (para mensajes de error) ----------
+  // ---------- DESCARGO DE RESPONSABILIDAD ----------
   const DISCLAIMER_LINES = [
     'Este menú es orientativo y no sustituye el consejo de un profesional sanitario ni de un dietista-nutricionista.',
     'Si tienes patologías, medicación crónica, TCA, embarazo u otras situaciones clínicas, consulta siempre con un profesional antes de seguir cualquier pauta alimentaria.'
@@ -114,10 +114,10 @@ exports.handler = async function (event, context) {
     'https://metabolismix.com/contacto/' +
     '</a>.';
 
-  // ---------- PARSEO INPUT ----------
   try {
+    // ---------- PARSEO INPUT ----------
     const body = JSON.parse(event.body || '{}');
-    const mode = body.mode || 'week'; // el front manda "week", pero generamos 1 día
+    const mode = body.mode || 'week';
     const payload = body.payload || {};
 
     const dailyMacros = payload.dailyMacros || {};
@@ -163,28 +163,27 @@ exports.handler = async function (event, context) {
       });
     }
 
-    // ---------- CONFIG GEMINI ----------
+    // ---------- CONFIG GEMINI (SIN SCHEMA ESTRICTO) ----------
     const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
     const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
     const systemPrompt = `
 Eres un asistente de planificación de menús llamado "Chef-Bot".
 
-Tu tarea:
-- Generar SOLO un plan de 1 día con entre 1 y 4 comidas (según numMeals).
-- Ajustar de forma aproximada los macros diarios objetivo (proteína, grasas y carbohidratos) repartidos entre las comidas.
-- Usar un estilo de dieta mediterránea: verduras, fruta, legumbres, aceite de oliva, pescado, algo de carne blanca, cereales integrales, frutos secos.
+Tarea:
+- Generar SOLO un plan de 1 día con entre 1 y 4 comidas (según "numMeals").
+- Ajustar de forma aproximada los macros diarios objetivo repartidos entre las comidas.
+- Estilo de dieta: mediterránea (verduras, fruta, legumbres, aceite de oliva, pescado, carne blanca, cereales integrales, frutos secos).
 - Respetar en la medida de lo posible las restricciones dietéticas indicadas (si las hay).
-- Si se dan ingredientes de "nevera", intentar priorizarlos dentro de lo razonable.
-- Mantener la receta realista para una persona en España (platos habituales, nada extravagante).
+- Si hay ingredientes de "nevera", intenta priorizarlos en los platos.
 
-Limitaciones importantes:
-- No hagas recomendaciones médicas personalizadas ni ajustes específicos para patologías concretas.
-- El menú es orientativo y NO sustituye el consejo de un profesional sanitario ni de un dietista-nutricionista.
-- No incluyas contenido ofensivo, sexual, violento ni promocionado como "milagroso".
-- No indiques pérdidas de peso concretas ni promesas de salud.
+Limitaciones:
+- El menú es orientativo, NO des recomendaciones médicas personalizadas ni para patologías concretas.
+- No prometas pérdidas de peso ni mejoras clínicas específicas.
+- No incluyas contenido ofensivo, sexual, violento ni productos "milagro".
 
-Estructura de salida (JSON):
+Debes devolver EXCLUSIVAMENTE un JSON con esta forma aproximada:
+
 {
   "mode": "week",
   "plan_name": "Plan de 1 día generado por Chef-Bot",
@@ -222,82 +221,16 @@ Estructura de salida (JSON):
   "general_tips": [string]
 }
 
-Restricciones adicionales:
-- Máximo 8 ingredientes por receta.
-- Máximo 3 pasos por receta.
-- No generes listas de la compra ni consejos excesivamente largos.
-- Respeta la estructura JSON indicada.
+Máximo 8 ingredientes por receta y máximo 3 pasos por receta.
+No escribas nada fuera del JSON.
 `;
 
-    const responseSchema = {
-      type: 'object',
-      properties: {
-        mode: { type: 'string' },
-        plan_name: { type: 'string' },
-        days: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              day_name: { type: 'string' },
-              total_macros: {
-                type: 'object',
-                properties: {
-                  protein_g: { type: 'number' },
-                  fat_g: { type: 'number' },
-                  carbs_g: { type: 'number' }
-                }
-              },
-              meals: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    meal_type: { type: 'string' },
-                    recipe_name: { type: 'string' },
-                    short_description: { type: 'string' },
-                    macros: {
-                      type: 'object',
-                      properties: {
-                        protein_g: { type: 'number' },
-                        fat_g: { type: 'number' },
-                        carbs_g: { type: 'number' }
-                      }
-                    },
-                    ingredients: {
-                      type: 'array',
-                      items: {
-                        type: 'object',
-                        properties: {
-                          name: { type: 'string' },
-                          quantity_grams: { type: 'number' },
-                          notes: { type: 'string' }
-                        }
-                      }
-                    },
-                    steps: {
-                      type: 'array',
-                      items: { type: 'string' }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        shopping_list: { type: 'array', items: { type: 'string' } },
-        general_tips: { type: 'array', items: { type: 'string' } }
-      },
-      required: ['days']
-    };
-
     const generationConfig = {
-      temperature: 0.4,
+      temperature: 0.5,
       topP: 0.9,
       topK: 32,
-      maxOutputTokens: 768,
-      responseMimeType: 'application/json',
-      responseSchema
+      maxOutputTokens: 650,
+      responseMimeType: 'application/json'
     };
 
     const userContent = {
@@ -469,12 +402,47 @@ Restricciones adicionales:
       });
     }
 
-    // ---------- PARSEO DE RESPUESTA CORRECTA ----------
+    // ---------- PARSEO DE RESPUESTA CORRECTA (MODO TOLERANTE) ----------
     const rawText = result?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const parsed = robustParse(stripFences(rawText));
-    const plan = parsed && typeof parsed === 'object' ? parsed : null;
+    let plan = parsed && typeof parsed === 'object' ? parsed : null;
 
-    if (!plan || !Array.isArray(plan.days)) {
+    // Heurísticas para reconstruir el plan si viene "raro"
+    if (plan) {
+      // Si viene algo tipo { plan: {...} }
+      if (!plan.days && plan.plan && typeof plan.plan === 'object') {
+        plan = plan.plan;
+      }
+
+      // Si viene algo tipo { day: [...] }
+      if (!plan.days && Array.isArray(plan.day)) {
+        plan.days = plan.day;
+      }
+
+      // Si viene algo tipo { meals: [...] } en la raíz
+      if ((!plan.days || !Array.isArray(plan.days) || !plan.days.length) && Array.isArray(plan.meals)) {
+        plan = {
+          mode: 'week',
+          plan_name: plan.plan_name || 'Plan de 1 día generado por Chef-Bot',
+          days: [
+            {
+              day_name: 'Día 1',
+              total_macros: {
+                protein_g: pTarget,
+                fat_g: fTarget,
+                carbs_g: cTarget
+              },
+              meals: plan.meals
+            }
+          ],
+          shopping_list: Array.isArray(plan.shopping_list) ? plan.shopping_list : [],
+          general_tips: Array.isArray(plan.general_tips) ? plan.general_tips : []
+        };
+      }
+    }
+
+    if (!plan || !Array.isArray(plan.days) || !plan.days.length) {
+      // Aquí es donde antes caías siempre -> ahora añadimos el JSON bruto para depurar
       return makePlanResponse({
         mode,
         plan_name: 'Plan no disponible (respuesta no válida)',
@@ -483,13 +451,14 @@ Restricciones adicionales:
         general_tips: [
           ...DISCLAIMER_LINES,
           'La IA ha devuelto una respuesta que no se ajusta al formato esperado.',
-          'Prueba a generar de nuevo el plan con una descripción más sencilla.',
-          CONTACT_HTML
+          'Prueba a generar de nuevo el plan con una descripción más sencilla (por ejemplo, sin restricciones muy complejas).',
+          'Si quieres que te ayudemos a diseñar un menú adaptado, puedes escribirnos desde <a href="https://metabolismix.com/contacto/" target="_blank" rel="noopener noreferrer">https://metabolismix.com/contacto/</a>.',
+          `Detalle técnico (primeros caracteres del JSON devuelto): ${rawText ? rawText.slice(0, 220) + (rawText.length > 220 ? '…' : '') : 'vacío'}`
         ]
       });
     }
 
-    // Normalizamos un poco pero sin tocar demasiado la estructura
+    // Normalizamos campos básicos
     plan.mode = 'week';
     if (!plan.plan_name) {
       plan.plan_name = 'Plan de 1 día generado por Chef-Bot';
