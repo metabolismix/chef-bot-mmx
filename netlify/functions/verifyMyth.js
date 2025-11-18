@@ -113,7 +113,7 @@ exports.handler = async function (event, context) {
       headers: {
         ...cors,
         'Content-Type': 'application/json',
-        'x-chefbot-func-version': 'v3-chefbot-1day-2025-11-18'
+        'x-chefbot-func-version': 'v3-chefbot-1day-2025-11-18b'
       },
       body: JSON.stringify(result)
     };
@@ -145,7 +145,10 @@ exports.handler = async function (event, context) {
     const fridgeIngredients = (payload.fridgeIngredients || '').trim();
     const style = (payload.style || 'mediterranea').trim().toLowerCase();
 
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    // 🔴 AQUÍ EL CAMBIO IMPORTANTE: aceptar GEMINI_API_KEY o GOOGLE_API_KEY
+    const GEMINI_API_KEY =
+      process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+
     if (!GEMINI_API_KEY) {
       return makePlanResponse({
         mode: 'week',
@@ -154,7 +157,7 @@ exports.handler = async function (event, context) {
         shopping_list: [],
         general_tips: [
           'Chef-Bot no está bien configurado en el servidor y ahora mismo no puede generar menús automáticos.',
-          'Revisa la variable GEMINI_API_KEY en Netlify o contacta con el equipo si el problema persiste.',
+          'Revisa que exista GEMINI_API_KEY o GOOGLE_API_KEY en las variables de entorno de Netlify para este sitio.',
           'Si quieres que te ayudemos a diseñar un menú adaptado, puedes escribirnos desde <a href="https://metabolismix.com/contacto/" target="_blank" rel="noopener noreferrer">https://metabolismix.com/contacto/</a>.'
         ]
       });
@@ -259,7 +262,6 @@ Estructura orientativa de cada día dentro de "days" (NO hace falta que esté en
 
     const userPrompt = userPromptLines.join('\n');
 
-    // Schema mínimo para evitar errores 400, sin meternos en detalles profundos
     const responseSchema = {
       type: 'object',
       properties: {
