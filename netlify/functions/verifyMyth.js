@@ -6,7 +6,7 @@ exports.handler = async function (event, context) {
     'Access-Control-Allow-Methods': 'POST, OPTIONS'
   };
 
-  // --------- CORS / MÉTODO ---------
+  // ---------- CORS / MÉTODO ----------
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: cors, body: '' };
   }
@@ -18,89 +18,32 @@ exports.handler = async function (event, context) {
     };
   }
 
-  // --------- CONSTANTES / CONFIG ---------
-  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-  const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-  const TIMEOUT_MS = parseInt(process.env.GEMINI_TIMEOUT_MS || '8000', 10);
-
-  const GLOBAL_DISCLAIMERS = [
-    'Este menú es orientativo y no sustituye el consejo de un profesional sanitario ni de un dietista-nutricionista.',
-    'Si tienes patologías, medicación crónica, TCA, embarazo u otras situaciones clínicas, consulta siempre con un profesional antes de seguir cualquier pauta alimentaria.'
-  ];
-
-  // Tabla muy simple de alimentos base para fallback determinista
-  const BASE_FOODS = {
-    chicken: {
-      id: 'chicken',
-      name: 'Pechuga de pollo',
-      macrosPer100g: { protein_g: 22, fat_g: 3, carbs_g: 0 }
-    },
-    salmon: {
-      id: 'salmon',
-      name: 'Salmón',
-      macrosPer100g: { protein_g: 20, fat_g: 13, carbs_g: 0 }
-    },
-    rice: {
-      id: 'rice',
-      name: 'Arroz integral cocido',
-      macrosPer100g: { protein_g: 2.5, fat_g: 0.3, carbs_g: 28 }
-    },
-    broccoli: {
-      id: 'broccoli',
-      name: 'Brócoli',
-      macrosPer100g: { protein_g: 3, fat_g: 0.4, carbs_g: 7 }
-    },
-    salad: {
-      id: 'salad',
-      name: 'Ensalada verde (mezclum)',
-      macrosPer100g: { protein_g: 1.5, fat_g: 0.2, carbs_g: 3 }
-    },
-    oats: {
-      id: 'oats',
-      name: 'Copos de avena',
-      macrosPer100g: { protein_g: 13, fat_g: 7, carbs_g: 60 }
-    },
-    yogurt: {
-      id: 'yogurt',
-      name: 'Yogur natural',
-      macrosPer100g: { protein_g: 5, fat_g: 3, carbs_g: 4.5 }
-    },
-    banana: {
-      id: 'banana',
-      name: 'Plátano',
-      macrosPer100g: { protein_g: 1.2, fat_g: 0.3, carbs_g: 23 }
-    },
-    oliveOil: {
-      id: 'oliveOil',
-      name: 'Aceite de oliva virgen extra',
-      macrosPer100g: { protein_g: 0, fat_g: 100, carbs_g: 0 }
-    }
+  // ---------- HELPERS GENERALES ----------
+  const safeNumber = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+  const clampInt = (v, min, max) => Math.round(clamp(v, min, max));
+  const gramsFromMacro = (macroTarget, per100g) => {
+    if (!per100g || per100g <= 0) return 0;
+    return (macroTarget * 100) / per100g;
   };
 
-  // --------- UTILIDADES GENERALES ---------
-  const safeNumber = (v) => (Number.isFinite(v) ? v : 0);
-
-  const stripText = (s) =>
-    typeof s === 'string'
-      ? s.replace(/\s+/g, ' ').replace(/\s+([.,;:!?])/g, '$1').trim()
-      : '';
-
-  const robustParse = (text) => {
-    if (!text) return null;
-    let t = String(text).trim();
-
-    // Quitar fences ```json
+  const stripCodeFences = (text) => {
+    let t = (text || '').trim();
     if (t.startsWith('```')) {
-      t = t.replace(/^```(?:json)?\s*/i, '').replace(/```$/, '').trim();
+      t = t.replace(/^```(?:json)?\s*/i, '').replace(/```$/, '');
     }
+    return t.trim();
+  };
 
-    // 1) Parse directo
+  const robustParseJSON = (text) => {
+    if (!text) return null;
+    const t = text.trim();
+    // 1) Intento directo
     try {
       return JSON.parse(t);
     } catch {}
 
-    // 2) Array raíz -> primer objeto
+    // 2) Si empieza por [, probar array
     if (t.startsWith('[')) {
       try {
         const arr = JSON.parse(t);
@@ -110,7 +53,7 @@ exports.handler = async function (event, context) {
       } catch {}
     }
 
-    // 3) Extraer primer bloque { ... } balanceado
+    // 3) Buscar bloque { ... } balanceado
     const start = t.indexOf('{');
     if (start >= 0) {
       let depth = 0;
@@ -146,103 +89,155 @@ exports.handler = async function (event, context) {
     return null;
   };
 
-  const isMealValid = (m) =>
-    m &&
-    typeof m.meal_type === 'string' &&
-    typeof m.recipe_name === 'string' &&
-    Array.isArray(m.ingredients) &&
-    m.ingredients.length > 0 &&
-    Array.isArray(m.steps) &&
-    m.steps.length > 0 &&
-    m.macros &&
-    typeof m.macros.protein_g === 'number' &&
-    typeof m.macros.fat_g === 'number' &&
-    typeof m.macros.carbs_g === 'number';
-
-  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-
-  const gramsFromMacro = (targetMacro, macroPer100g) => {
-    if (!macroPer100g || macroPer100g <= 0) return 0;
-    const grams = (targetMacro / macroPer100g) * 100;
-    return clamp(grams, 0, 250);
+  // ---------- TABLA DE ALIMENTOS BÁSICOS (MEDITERRÁNEOS) ----------
+  const BASE_FOODS = {
+    chicken: {
+      id: 'chicken',
+      name: 'Pechuga de pollo',
+      macrosPer100g: { protein_g: 22, fat_g: 3, carbs_g: 0 }
+    },
+    turkey: {
+      id: 'turkey',
+      name: 'Pavo',
+      macrosPer100g: { protein_g: 24, fat_g: 2, carbs_g: 0 }
+    },
+    salmon: {
+      id: 'salmon',
+      name: 'Salmón',
+      macrosPer100g: { protein_g: 20, fat_g: 13, carbs_g: 0 }
+    },
+    tuna: {
+      id: 'tuna',
+      name: 'Atún en conserva al natural',
+      macrosPer100g: { protein_g: 23, fat_g: 1, carbs_g: 0 }
+    },
+    eggs: {
+      id: 'eggs',
+      name: 'Huevo',
+      macrosPer100g: { protein_g: 13, fat_g: 11, carbs_g: 1 }
+    },
+    eggwhites: {
+      id: 'eggwhites',
+      name: 'Clara de huevo',
+      macrosPer100g: { protein_g: 11, fat_g: 0, carbs_g: 1 }
+    },
+    yogurt: {
+      id: 'yogurt',
+      name: 'Yogur natural',
+      macrosPer100g: { protein_g: 5, fat_g: 3, carbs_g: 4.5 }
+    },
+    cottage: {
+      id: 'cottage',
+      name: 'Queso fresco batido / requesón',
+      macrosPer100g: { protein_g: 8, fat_g: 4, carbs_g: 4 }
+    },
+    oats: {
+      id: 'oats',
+      name: 'Copos de avena',
+      macrosPer100g: { protein_g: 13, fat_g: 7, carbs_g: 60 }
+    },
+    rice: {
+      id: 'rice',
+      name: 'Arroz integral cocido',
+      macrosPer100g: { protein_g: 2.5, fat_g: 0.3, carbs_g: 28 }
+    },
+    pasta: {
+      id: 'pasta',
+      name: 'Pasta integral cocida',
+      macrosPer100g: { protein_g: 6, fat_g: 1.5, carbs_g: 30 }
+    },
+    bread: {
+      id: 'bread',
+      name: 'Pan integral',
+      macrosPer100g: { protein_g: 9, fat_g: 3, carbs_g: 45 }
+    },
+    chickpeas: {
+      id: 'chickpeas',
+      name: 'Garbanzos cocidos',
+      macrosPer100g: { protein_g: 7, fat_g: 2, carbs_g: 20 }
+    },
+    lentils: {
+      id: 'lentils',
+      name: 'Lentejas cocidas',
+      macrosPer100g: { protein_g: 8, fat_g: 0.8, carbs_g: 18 }
+    },
+    broccoli: {
+      id: 'broccoli',
+      name: 'Brócoli',
+      macrosPer100g: { protein_g: 3, fat_g: 0.4, carbs_g: 7 }
+    },
+    tomato: {
+      id: 'tomato',
+      name: 'Tomate',
+      macrosPer100g: { protein_g: 1, fat_g: 0.2, carbs_g: 3 }
+    },
+    courgette: {
+      id: 'courgette',
+      name: 'Calabacín',
+      macrosPer100g: { protein_g: 1.2, fat_g: 0.3, carbs_g: 3 }
+    },
+    pepper: {
+      id: 'pepper',
+      name: 'Pimiento rojo',
+      macrosPer100g: { protein_g: 1.3, fat_g: 0.3, carbs_g: 6 }
+    },
+    onion: {
+      id: 'onion',
+      name: 'Cebolla',
+      macrosPer100g: { protein_g: 1.1, fat_g: 0.1, carbs_g: 9 }
+    },
+    salad: {
+      id: 'salad',
+      name: 'Ensalada verde (mezclum)',
+      macrosPer100g: { protein_g: 1.5, fat_g: 0.2, carbs_g: 3 }
+    },
+    banana: {
+      id: 'banana',
+      name: 'Plátano',
+      macrosPer100g: { protein_g: 1.2, fat_g: 0.3, carbs_g: 23 }
+    },
+    apple: {
+      id: 'apple',
+      name: 'Manzana',
+      macrosPer100g: { protein_g: 0.3, fat_g: 0.2, carbs_g: 14 }
+    },
+    oliveOil: {
+      id: 'oliveOil',
+      name: 'Aceite de oliva virgen extra',
+      macrosPer100g: { protein_g: 0, fat_g: 100, carbs_g: 0 }
+    },
+    nuts: {
+      id: 'nuts',
+      name: 'Frutos secos (nueces/almendras)',
+      macrosPer100g: { protein_g: 18, fat_g: 55, carbs_g: 13 }
+    },
+    potato: {
+      id: 'potato',
+      name: 'Patata cocida',
+      macrosPer100g: { protein_g: 2, fat_g: 0.1, carbs_g: 17 }
+    }
   };
 
-  const mergeShoppingList = (days) => {
-    const acc = new Map(); // key = name, value = grams
-
-    days.forEach((day) => {
-      (day.meals || []).forEach((meal) => {
-        (meal.ingredients || []).forEach((ing) => {
-          const name = stripText(ing.name || '').toLowerCase();
-          if (!name) return;
-          const grams = safeNumber(ing.quantity_grams || ing.quantity || 0);
-          const prev = acc.get(name) || 0;
-          acc.set(name, prev + grams);
-        });
-      });
-    });
-
-    const list = [];
-    for (const [name, grams] of acc.entries()) {
-      const prettyName = name.charAt(0).toUpperCase() + name.slice(1);
-      list.push(`${Math.round(grams)} g de ${prettyName}`);
-    }
-    return list;
-  };
-
-  // --------- REPARTO DE MACROS POR COMIDA ---------
-  function buildMealSlots(dailyMacros, numMeals) {
-    const totalP = safeNumber(dailyMacros.protein_g);
-    const totalF = safeNumber(dailyMacros.fat_g);
-    const totalC = safeNumber(dailyMacros.carbs_g);
-
-    const n = clamp(numMeals, 1, 4);
-
-    let fractions;
-    let mealTypes;
-
-    if (n === 1) {
-      fractions = [1];
-      mealTypes = ['Comida principal'];
-    } else if (n === 2) {
-      fractions = [0.55, 0.45];
-      mealTypes = ['Comida fuerte (mediodía)', 'Cena ligera'];
-    } else if (n === 3) {
-      fractions = [0.25, 0.4, 0.35];
-      mealTypes = ['Desayuno', 'Comida', 'Cena'];
-    } else {
-      // 4 comidas
-      fractions = [0.25, 0.35, 0.15, 0.25];
-      mealTypes = ['Desayuno', 'Comida', 'Merienda', 'Cena'];
-    }
-
-    return fractions.map((frac, idx) => ({
-      meal_type: mealTypes[idx] || `Comida ${idx + 1}`,
-      target_macros: {
-        protein_g: totalP * frac,
-        fat_g: totalF * frac,
-        carbs_g: totalC * frac
-      }
-    }));
-  }
-
-  // --------- FALLBACK DETERMINISTA (SIN IA) ---------
+  // ---------- FALLBACK DETERMINISTA (DESAYUNO / COMIDA / CENA) ----------
   function buildFallbackMeal(slot) {
     const { meal_type, target_macros } = slot || {};
     const P = safeNumber(target_macros?.protein_g);
     const F = safeNumber(target_macros?.fat_g);
     const C = safeNumber(target_macros?.carbs_g);
 
-    const isBreakfast = /desayuno/i.test(meal_type || '');
-    const isSnack = /merienda/i.test(meal_type || '');
+    const label = meal_type || '';
+    const isBreakfast = /desayuno/i.test(label);
+    const isSnack = /merienda/i.test(label);
+    const isLunch = /comida/i.test(label);
+    const isDinner = /cena/i.test(label);
 
     let ingredients = [];
     let macros = { protein_g: 0, fat_g: 0, carbs_g: 0 };
     let recipe_name;
     let steps;
 
+    // --- Desayuno / Merienda: bol de yogur + avena + plátano ---
     if (isBreakfast || isSnack) {
-      // Desayuno / merienda: yogur + avena + plátano + frutos secos simulados
       const yogurtGr = clamp(150, 80, 250);
       const oatsGr = clamp(40, 20, 80);
       const bananaGr = clamp(80, 50, 120);
@@ -278,17 +273,33 @@ exports.handler = async function (event, context) {
         'Corta el plátano en rodajas y repártelo por el bol.',
         'Completa con frutos secos picados. Puedes añadir canela al gusto.'
       ];
-    } else {
-      // Comida / cena: pollo + arroz + verdura + aceite de oliva
+
+      return {
+        meal_type: meal_type || 'Desayuno',
+        recipe_name,
+        short_description:
+          'Plato generado de forma automática por Chef-Bot cuando la IA no estaba disponible. Las cantidades son aproximadas.',
+        macros: {
+          protein_g: Math.round(macros.protein_g),
+          fat_g: Math.round(macros.fat_g),
+          carbs_g: Math.round(macros.carbs_g)
+        },
+        ingredients,
+        steps
+      };
+    }
+
+    // --- Comida: pollo + arroz integral + brócoli + aceite ---
+    if (isLunch || (!isDinner && !isBreakfast && !isSnack)) {
       const p100 = BASE_FOODS.chicken.macrosPer100g;
       const r100 = BASE_FOODS.rice.macrosPer100g;
       const b100 = BASE_FOODS.broccoli.macrosPer100g;
       const o100 = BASE_FOODS.oliveOil.macrosPer100g;
 
-      const chickenGr = clamp(gramsFromMacro(P * 0.75, p100.protein_g), 100, 220);
-      const riceGr = clamp(gramsFromMacro(C * 0.75, r100.carbs_g), 60, 200);
-      const broccoliGr = clamp(100, 60, 150);
-      const oilGr = clamp(F, 5, 15); // 1 g aceite = 1 g grasa aprox.
+      const chickenGr = clamp(gramsFromMacro(P * 0.75, p100.protein_g), 120, 230);
+      const riceGr = clamp(gramsFromMacro(C * 0.7, r100.carbs_g), 80, 220);
+      const broccoliGr = clamp(120, 60, 180);
+      const oilGr = clamp(F, 5, 15);
 
       macros.protein_g =
         (p100.protein_g * chickenGr) / 100 +
@@ -318,10 +329,64 @@ exports.handler = async function (event, context) {
         'Añade el brócoli troceado y saltea unos minutos más, o cuécelo al vapor aparte.',
         'Sirve el arroz en la base del plato, coloca el pollo y el brócoli encima y termina con el resto del aceite en crudo.'
       ];
+
+      return {
+        meal_type: meal_type || 'Comida',
+        recipe_name,
+        short_description:
+          'Plato generado de forma automática por Chef-Bot cuando la IA no estaba disponible. Las cantidades son aproximadas.',
+        macros: {
+          protein_g: Math.round(macros.protein_g),
+          fat_g: Math.round(macros.fat_g),
+          carbs_g: Math.round(macros.carbs_g)
+        },
+        ingredients,
+        steps
+      };
     }
 
+    // --- Cena: salmón + patata + brócoli + aceite ---
+    const s100 = BASE_FOODS.salmon.macrosPer100g;
+    const p100 = BASE_FOODS.potato.macrosPer100g;
+    const b100 = BASE_FOODS.broccoli.macrosPer100g;
+    const o100 = BASE_FOODS.oliveOil.macrosPer100g;
+
+    const salmonGr = clamp(gramsFromMacro(P * 0.75, s100.protein_g), 120, 220);
+    const potatoGr = clamp(gramsFromMacro(C * 0.7, p100.carbs_g), 120, 260);
+    const broccoliGr = clamp(100, 60, 180);
+    const oilGr = clamp(F, 5, 15);
+
+    macros.protein_g =
+      (s100.protein_g * salmonGr) / 100 +
+      (p100.protein_g * potatoGr) / 100 +
+      (b100.protein_g * broccoliGr) / 100;
+    macros.fat_g =
+      (s100.fat_g * salmonGr) / 100 +
+      (p100.fat_g * potatoGr) / 100 +
+      (b100.fat_g * broccoliGr) / 100 +
+      (o100.fat_g * oilGr) / 100;
+    macros.carbs_g =
+      (s100.carbs_g * salmonGr) / 100 +
+      (p100.carbs_g * potatoGr) / 100 +
+      (b100.carbs_g * broccoliGr) / 100;
+
+    ingredients = [
+      { name: 'Salmón', quantity_grams: Math.round(salmonGr), notes: 'Lomo o filete' },
+      { name: 'Patata cocida', quantity_grams: Math.round(potatoGr), notes: 'En dados o rodajas' },
+      { name: 'Brócoli', quantity_grams: Math.round(broccoliGr), notes: 'En ramilletes' },
+      { name: 'Aceite de oliva virgen extra', quantity_grams: Math.round(oilGr), notes: 'Para cocinar y aliñar' }
+    ];
+
+    recipe_name = 'Salmón con patata y brócoli al horno';
+    steps = [
+      'Precalienta el horno a unos 180–200 ºC.',
+      'Coloca el salmón en una bandeja con parte del aceite, sal y las especias que prefieras.',
+      'Añade la patata cocida troceada y el brócoli alrededor, rocía con el resto del aceite y mezcla ligeramente.',
+      'Hornea hasta que el salmón esté hecho y las verduras ligeramente doradas.'
+    ];
+
     return {
-      meal_type: meal_type || 'Comida',
+      meal_type: meal_type || 'Cena',
       recipe_name,
       short_description:
         'Plato generado de forma automática por Chef-Bot cuando la IA no estaba disponible. Las cantidades son aproximadas.',
@@ -335,346 +400,339 @@ exports.handler = async function (event, context) {
     };
   }
 
-  // --------- LLAMADA A GEMINI (POR COMIDA) ---------
-  async function callGeminiForMeal(slot, dietaryFilter, fridgeIngredientsText) {
-    if (!GEMINI_API_KEY) {
-      // Sin clave -> forzamos fallo para que salte fallback
-      throw new Error('Falta GEMINI_API_KEY');
+  // ---------- ¿ES VÁLIDA UNA COMIDA DEVUELTA POR LA IA? ----------
+  function isValidMealObject(obj) {
+    if (!obj || typeof obj !== 'object') return false;
+    if (!obj.meal_type || !obj.recipe_name) return false;
+    if (!obj.macros || typeof obj.macros !== 'object') return false;
+    if (!Array.isArray(obj.ingredients) || !obj.ingredients.length) return false;
+    if (!Array.isArray(obj.steps) || !obj.steps.length) return false;
+    if (
+      !Number.isFinite(Number(obj.macros.protein_g)) ||
+      !Number.isFinite(Number(obj.macros.fat_g)) ||
+      !Number.isFinite(Number(obj.macros.carbs_g))
+    ) {
+      return false;
     }
+    return true;
+  }
 
-    const { meal_type, target_macros } = slot || {};
+  // ---------- LLAMADA A GEMINI PARA UNA COMIDA ----------
+  async function callGeminiForMeal(slot, apiKey, model, timeoutMs) {
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+    const { meal_type, target_macros, dietaryFilter, fridgeIngredients, style } = slot;
     const P = safeNumber(target_macros?.protein_g);
     const F = safeNumber(target_macros?.fat_g);
     const C = safeNumber(target_macros?.carbs_g);
 
-    const dietary = stripText(dietaryFilter || '');
-    const fridge = stripText(fridgeIngredientsText || '');
+    const styleLabel = style || 'mediterránea';
 
-    const systemPrompt = `
-Eres un asistente culinario que propone ideas de platos mediterráneos orientativos para personas adultas sanas.
-No eres médico ni dietista.
-No des consejos médicos, no hables de enfermedades, ni de pérdida de peso, ni de patologías.
-Tu tarea es sugerir un único plato realista y casero, con ingredientes sencillos y cantidades aproximadas en gramos.
-Respeta cualquier restricción alimentaria que se indique (por ejemplo: sin frutos secos, sin gluten, vegetariano...).
-Si no se indican restricciones, asume que la persona no tiene alergias conocidas, pero evita combinaciones raras o poco apetecibles.
-No menciones macros, gramos ni calorías en la descripción ni en los pasos; solo en los campos estructurados.
-Las cantidades en gramos pueden desviarse algo del objetivo, pero intenta acercarte.
-`.trim();
+    const prompt = `
+Eres un asistente CULINARIO (no médico). 
+Tu tarea es proponer UNA sola receta sencilla estilo ${styleLabel}, apta para una persona adulta sana, a partir de estos objetivos aproximados de macronutrientes:
 
-    const userPrompt = `
-Genera un único plato para la siguiente comida: "${meal_type || 'Comida'}".
+- Proteína objetivo: ~${Math.round(P)} g
+- Grasas objetivo: ~${Math.round(F)} g
+- Hidratos objetivo: ~${Math.round(C)} g
 
-Macros objetivo aproximados:
-- Proteína: ${Math.round(P)} g
-- Grasas: ${Math.round(F)} g
-- Carbohidratos: ${Math.round(C)} g
+Tipo de comida: "${meal_type || 'Comida'}".
 
-Restricciones dietéticas (si están vacías, ignóralas): ${dietary || 'ninguna especificada'}.
+Restricciones dietéticas declaradas por el usuario (texto libre, NO es consejo médico): "${dietaryFilter || 'ninguna específica'}".
 
-Ingredientes disponibles en la nevera (si hay, priorízalos, pero puedes añadir otros básicos mediterráneos si hace falta): ${
-      fridge || 'no se ha especificado ninguno'
-    }.
+Ingredientes en la nevera (texto libre, úsalo solo como guía si ayuda): "${fridgeIngredients || 'no especificado'}".
 
-Condiciones importantes:
-- El plato debe ser de estilo mediterráneo (ejemplo: combinaciones con verduras, legumbres, cereales integrales, pescado, aves, aceite de oliva...).
-- Evita mezclar ingredientes que, en la práctica, se comerían con dificultad (ejemplos a evitar: atún con plátano en el mismo plato, combinaciones muy dulces con carnes sin sentido culinario).
-- Usa ingredientes que se encuentren de forma razonable en un supermercado de España.
-- Las cantidades en gramos deben ser coherentes con un plato normal (nada de 500 g de aceite, etc.).
+REGLAS IMPORTANTES:
+- No des consejos médicos ni nutricionales personalizados.
+- No menciones enfermedades, medicación, TCA, embarazo ni ajustes clínicos.
+- El menú es general y orientativo, para población adulta sana.
+- Devuelve SOLO un objeto JSON válido, sin texto adicional, sin comentarios y SIN bloques de código.
+- Usa cantidades en GRAMOS enteros para los ingredientes.
+- Mantén la receta casera, corta y realista.
 
-Devuelve SOLO JSON (sin texto adicional) con esta estructura:
+ESQUEMA JSON QUE DEBES DEVOLVER, SIN NINGÚN TEXTO MÁS:
 
 {
-  "meal_type": "Desayuno" | "Comida" | "Cena" | "Merienda",
-  "recipe_name": "Nombre del plato",
-  "short_description": "Descripción breve, 2-3 frases, sin macros ni gramos.",
+  "meal_type": "Desayuno" | "Comida" | "Merienda" | "Cena",
+  "recipe_name": "string",
+  "short_description": "string (1–2 frases, aclarando que es orientativo y no sustituye consejo profesional)",
   "macros": {
-    "protein_g": número (aprox),
-    "fat_g": número (aprox),
-    "carbs_g": número (aprox)
+    "protein_g": number,
+    "fat_g": number,
+    "carbs_g": number
   },
   "ingredients": [
     {
-      "name": "Nombre del ingrediente",
-      "quantity_grams": número (en gramos),
-      "notes": "Opcional: breve aclaración"
+      "name": "string",
+      "quantity_grams": number,
+      "notes": "string"
     }
   ],
   "steps": [
-    "Paso 1...",
-    "Paso 2..."
+    "string",
+    "string"
   ]
 }
 `.trim();
 
-    const responseSchema = {
-      type: 'object',
-      properties: {
-        meal_type: { type: 'string' },
-        recipe_name: { type: 'string' },
-        short_description: { type: 'string' },
-        macros: {
-          type: 'object',
-          properties: {
-            protein_g: { type: 'number' },
-            fat_g: { type: 'number' },
-            carbs_g: { type: 'number' }
-          },
-          required: ['protein_g', 'fat_g', 'carbs_g']
-        },
-        ingredients: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              name: { type: 'string' },
-              quantity_grams: { type: 'number' },
-              notes: { type: 'string' }
-            },
-            required: ['name', 'quantity_grams']
-          }
-        },
-        steps: {
-          type: 'array',
-          items: { type: 'string' }
-        }
-      },
-      required: ['meal_type', 'recipe_name', 'macros', 'ingredients', 'steps']
-    };
-
     const payload = {
-      contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-      systemInstruction: { role: 'user', parts: [{ text: systemPrompt }] },
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.45,
-        topP: 0.9,
-        topK: 32,
-        maxOutputTokens: 1024,
-        responseMimeType: 'application/json',
-        responseSchema
+        temperature: 0.5,
+        maxOutputTokens: 512
       }
     };
 
-    let res;
-    let result;
-    let timedOut = false;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      timedOut = true;
-      controller.abort();
-    }, TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+    let res;
     try {
-      res = await fetch(API_URL, {
+      res = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
         signal: controller.signal
       });
-    } catch (err) {
+    } finally {
       clearTimeout(timeoutId);
-      if (timedOut) {
-        throw new Error('Timeout al llamar a Gemini');
-      }
-      throw err;
     }
 
-    clearTimeout(timeoutId);
-    result = await res.json().catch(() => ({}));
+    const result = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      const msg = result?.error?.message || `Error HTTP ${res.status}`;
-      throw new Error(msg);
+      const msg = result?.error?.message || `HTTP ${res.status}`;
+      throw new Error(`Gemini error: ${msg}`);
     }
 
-    const rawText = result?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const parsed = robustParse(rawText);
-
-    if (!parsed || !isMealValid(parsed)) {
-      throw new Error('Respuesta de Gemini no válida para meal');
+    const text = result?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!text.trim()) {
+      throw new Error('Gemini devolvió texto vacío');
     }
 
-    // Sanitizar mínimamente
-    return {
-      meal_type: stripText(parsed.meal_type || meal_type || 'Comida'),
-      recipe_name: stripText(parsed.recipe_name || 'Plato sugerido por Chef-Bot'),
-      short_description: stripText(parsed.short_description || ''),
-      macros: {
-        protein_g: safeNumber(parsed.macros?.protein_g),
-        fat_g: safeNumber(parsed.macros?.fat_g),
-        carbs_g: safeNumber(parsed.macros?.carbs_g)
-      },
-      ingredients: Array.isArray(parsed.ingredients)
-        ? parsed.ingredients
-            .map((ing) => ({
-              name: stripText(ing.name || ''),
-              quantity_grams: safeNumber(ing.quantity_grams || ing.quantity || 0),
-              notes: stripText(ing.notes || '')
-            }))
-            .filter((ing) => ing.name && ing.quantity_grams > 0)
-        : [],
-      steps: Array.isArray(parsed.steps)
-        ? parsed.steps.map((s) => stripText(s)).filter(Boolean)
-        : []
-    };
+    const cleaned = stripCodeFences(text);
+    const obj = robustParseJSON(cleaned);
+
+    if (!isValidMealObject(obj)) {
+      throw new Error('Gemini devolvió JSON no válido para comida');
+    }
+
+    return obj;
   }
 
-  // --------- HANDLER PRINCIPAL ---------
+  // ---------- CONSTRUCCIÓN DE SLOTS DE COMIDAS ----------
+  function buildMealSlots(numMeals, dailyMacros) {
+    const P = safeNumber(dailyMacros.protein_g);
+    const F = safeNumber(dailyMacros.fat_g);
+    const C = safeNumber(dailyMacros.carbs_g);
+
+    const slots = [];
+
+    if (numMeals === 1) {
+      slots.push({
+        meal_type: 'Comida',
+        target_macros: { protein_g: P, fat_g: F, carbs_g: C }
+      });
+      return slots;
+    }
+
+    if (numMeals === 2) {
+      slots.push({
+        meal_type: 'Comida',
+        target_macros: { protein_g: P * 0.55, fat_g: F * 0.55, carbs_g: C * 0.55 }
+      });
+      slots.push({
+        meal_type: 'Cena',
+        target_macros: { protein_g: P * 0.45, fat_g: F * 0.45, carbs_g: C * 0.45 }
+      });
+      return slots;
+    }
+
+    if (numMeals === 3) {
+      slots.push({
+        meal_type: 'Desayuno',
+        target_macros: { protein_g: P * 0.25, fat_g: F * 0.25, carbs_g: C * 0.25 }
+      });
+      slots.push({
+        meal_type: 'Comida',
+        target_macros: { protein_g: P * 0.45, fat_g: F * 0.45, carbs_g: C * 0.45 }
+      });
+      slots.push({
+        meal_type: 'Cena',
+        target_macros: { protein_g: P * 0.30, fat_g: F * 0.30, carbs_g: C * 0.30 }
+      });
+      return slots;
+    }
+
+    // numMeals === 4
+    slots.push({
+      meal_type: 'Desayuno',
+      target_macros: { protein_g: P * 0.20, fat_g: F * 0.20, carbs_g: C * 0.20 }
+    });
+    slots.push({
+      meal_type: 'Comida',
+      target_macros: { protein_g: P * 0.40, fat_g: F * 0.40, carbs_g: C * 0.40 }
+    });
+    slots.push({
+      meal_type: 'Merienda',
+      target_macros: { protein_g: P * 0.15, fat_g: F * 0.15, carbs_g: C * 0.15 }
+    });
+    slots.push({
+      meal_type: 'Cena',
+      target_macros: { protein_g: P * 0.25, fat_g: F * 0.25, carbs_g: C * 0.25 }
+    });
+
+    return slots;
+  }
+
+  // ---------- GENERAR UNA COMIDA (IA + FALLBACK) ----------
+  async function generateMealWithAIOrFallback(slot, apiKey, model, timeoutMs) {
+    // Si no hay API key, vamos directo a fallback “bonito”
+    if (!apiKey) {
+      return buildFallbackMeal(slot);
+    }
+
+    try {
+      const aiMeal = await callGeminiForMeal(slot, apiKey, model, timeoutMs);
+      if (isValidMealObject(aiMeal)) {
+        // Normalización mínima
+        aiMeal.meal_type = aiMeal.meal_type || slot.meal_type;
+        aiMeal.short_description =
+          aiMeal.short_description ||
+          'Plato generado con ayuda de IA de forma orientativa. No sustituye el consejo de un profesional sanitario.';
+        return aiMeal;
+      }
+      // Si por lo que sea no pasa la validación, caemos a fallback
+      return buildFallbackMeal(slot);
+    } catch (err) {
+      // Cualquier error de red, timeout, políticas, formato... → fallback
+      return buildFallbackMeal(slot);
+    }
+  }
+
+  // ---------- AGREGAR LISTA DE LA COMPRA ----------
+  function buildShoppingList(meals) {
+    const map = new Map();
+    for (const meal of meals) {
+      const ings = Array.isArray(meal.ingredients) ? meal.ingredients : [];
+      for (const ing of ings) {
+        const name = ing.name || '';
+        const q = safeNumber(ing.quantity_grams);
+        if (!name || !q) continue;
+        const prev = map.get(name) || 0;
+        map.set(name, prev + q);
+      }
+    }
+    return Array.from(map.entries()).map(
+      ([name, total]) => `${Math.round(total)} g de ${name}`
+    );
+  }
+
+  // ---------- LÓGICA PRINCIPAL ----------
   try {
     const body = JSON.parse(event.body || '{}');
     const mode = body.mode || 'day';
     const payload = body.payload || {};
 
-    if (mode !== 'day') {
-      // Ahora sólo soportamos 1 día
-      return {
-        statusCode: 200,
-        headers: { ...cors, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'day',
-          plan_name: 'Plan no disponible (modo no soportado)',
-          days: [],
-          shopping_list: [],
-          general_tips: [
-            ...GLOBAL_DISCLAIMERS,
-            'Chef-Bot ahora genera únicamente menús de 1 día. Actualiza tu llamada para usar mode: "day".'
-          ]
-        })
-      };
-    }
-
     const dailyMacros = payload.dailyMacros || {};
-    const numMeals = clamp(parseInt(payload.numMeals, 10) || 3, 1, 4);
+    const numMeals = clampInt(payload.numMeals || 3, 1, 4);
     const dietaryFilter = payload.dietaryFilter || '';
     const fridgeIngredients = payload.fridgeIngredients || '';
-    const style = payload.style || 'mediterranea';
+    const style = payload.style || 'mediterránea';
 
-    const totalP = safeNumber(dailyMacros.protein_g);
-    const totalF = safeNumber(dailyMacros.fat_g);
-    const totalC = safeNumber(dailyMacros.carbs_g);
+    const P = safeNumber(dailyMacros.protein_g);
+    const F = safeNumber(dailyMacros.fat_g);
+    const C = safeNumber(dailyMacros.carbs_g);
 
-    if (!GEMINI_API_KEY) {
+    if (P <= 0 || F <= 0 || C <= 0) {
       return {
-        statusCode: 200,
+        statusCode: 400,
         headers: { ...cors, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          mode: 'day',
-          plan_name: 'Plan no disponible (configuración)',
-          days: [],
-          shopping_list: [],
-          general_tips: [
-            ...GLOBAL_DISCLAIMERS,
-            'Chef-Bot no está bien configurado en el servidor y ahora mismo no puede generar menús automáticos.',
-            'Revisa la variable GEMINI_API_KEY en Netlify o contacta con el equipo si el problema persiste.',
-            'Si quieres que te ayudemos a diseñar un menú adaptado, puedes escribirnos desde <a href="https://metabolismix.com/contacto/" target="_blank" rel="noopener noreferrer">https://metabolismix.com/contacto/</a>.'
-          ]
+          error: 'Macros diarios no válidos. Asegúrate de introducir proteína, grasas e hidratos mayores que 0.'
         })
       };
     }
 
-    if (totalP <= 0 || totalF <= 0 || totalC <= 0) {
-      return {
-        statusCode: 200,
-        headers: { ...cors, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'day',
-          plan_name: 'Plan no disponible (parámetros inválidos)',
-          days: [],
-          shopping_list: [],
-          general_tips: [
-            ...GLOBAL_DISCLAIMERS,
-            'Introduce proteínas, grasas y carbohidratos objetivos mayores de 0 para poder generar un menú.',
-            'Revisa los campos de macros en Chef-Bot y vuelve a intentarlo.'
-          ]
-        })
-      };
-    }
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+    const GEMINI_TIMEOUT_MS = parseInt(process.env.GEMINI_TIMEOUT_MS || '12000', 10);
 
-    // 1 día, varios slots (1-4 comidas)
-    const slots = buildMealSlots(dailyMacros, numMeals);
+    // Construir slots de comidas
+    const slots = buildMealSlots(numMeals, { protein_g: P, fat_g: F, carbs_g: C });
+
+    // Generar cada comida (IA + fallback)
     const meals = [];
-
     for (const slot of slots) {
-      let meal;
-      try {
-        meal = await callGeminiForMeal(slot, dietaryFilter, fridgeIngredients);
-      } catch (e) {
-        // Si falla IA, usamos fallback determinista
-        meal = buildFallbackMeal(slot);
-      }
-      if (!isMealValid(meal)) {
-        // Último salvavidas
-        meal = buildFallbackMeal(slot);
-      }
+      const fullSlot = {
+        ...slot,
+        dietaryFilter,
+        fridgeIngredients,
+        style
+      };
+      const meal = await generateMealWithAIOrFallback(
+        fullSlot,
+        GEMINI_API_KEY,
+        GEMINI_MODEL,
+        GEMINI_TIMEOUT_MS
+      );
       meals.push(meal);
     }
 
-    // Calcular macros totales del día
-    const totalDayMacros = meals.reduce(
-      (acc, m) => {
-        acc.protein_g += safeNumber(m.macros?.protein_g);
-        acc.fat_g += safeNumber(m.macros?.fat_g);
-        acc.carbs_g += safeNumber(m.macros?.carbs_g);
-        return acc;
-      },
-      { protein_g: 0, fat_g: 0, carbs_g: 0 }
-    );
+    // Construir plan final tipo "día"
+    const shopping_list = buildShoppingList(meals);
 
-    const day = {
-      day_name: 'Día 1',
-      total_macros: {
-        protein_g: Math.round(totalDayMacros.protein_g),
-        fat_g: Math.round(totalDayMacros.fat_g),
-        carbs_g: Math.round(totalDayMacros.carbs_g)
-      },
-      meals
-    };
-
-    const days = [day];
-    const shopping_list = mergeShoppingList(days);
-
-    const tips = [
-      ...GLOBAL_DISCLAIMERS,
-      `Este menú ha sido generado combinando IA culinaria y lógica automática de Chef-Bot para aproximarse a tus macros diarios (${Math.round(
-        totalP
-      )} g proteína, ${Math.round(totalF)} g grasa, ${Math.round(totalC)} g hidratos).`,
-      'Algunas comidas pueden haberse generado con un fallback interno si la IA no estaba disponible en el momento de la petición.',
-      style === 'mediterranea'
-        ? 'El estilo general del día intenta seguir la lógica de una alimentación mediterránea casera (verdura, proteína de calidad, cereales, aceite de oliva...).'
-        : 'El menú está pensado como una combinación equilibrada y razonable de platos sencillos.'
+    const general_tips = [
+      'Este menú es orientativo y no sustituye el consejo de un profesional sanitario ni de un dietista-nutricionista.',
+      'Si tienes patologías, medicación crónica, TCA, embarazo u otras situaciones clínicas, consulta siempre con un profesional antes de seguir cualquier pauta alimentaria.',
+      `Este menú intenta aproximarse a tus macros diarios (~${Math.round(
+        P
+      )} g proteína, ~${Math.round(F)} g grasa, ~${Math.round(C)} g hidratos) mediante una combinación de IA y lógica automática de Chef-Bot.`,
+      'Algunas comidas pueden haberse generado con un fallback interno cuando la IA no estaba disponible o la respuesta no era válida.',
+      'El estilo general del día intenta seguir una alimentación mediterránea casera (verdura, proteína de calidad, cereales, legumbre, aceite de oliva...).'
     ];
 
-    return {
-      statusCode: 200,
-      headers: {
-        ...cors,
-        'Content-Type': 'application/json',
-        'x-chefbot-func-version': 'v3-chefbot-hybrid-2025-11-18'
-      },
-      body: JSON.stringify({
-        mode: 'day',
-        plan_name: 'Menú de 1 día generado por Chef-Bot',
-        days,
-        shopping_list,
-        general_tips: tips
-      })
+    const plan = {
+      mode: mode === 'day' ? 'day' : 'day',
+      plan_name: 'Menú de 1 día generado por Chef-Bot',
+      days: [
+        {
+          day_name: 'Día 1',
+          total_macros: {
+            protein_g: Math.round(P),
+            fat_g: Math.round(F),
+            carbs_g: Math.round(C)
+          },
+          meals
+        }
+      ],
+      shopping_list,
+      general_tips
     };
-  } catch (error) {
-    // Cualquier excepción interna
+
     return {
       statusCode: 200,
       headers: { ...cors, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mode: 'day',
-        plan_name: 'Plan no disponible (error interno)',
-        days: [],
-        shopping_list: [],
-        general_tips: [
-          ...GLOBAL_DISCLAIMERS,
-          'Ha ocurrido un problema interno al generar el menú.',
-          'Prueba a recargar la página y repetir la petición. Si el problema persiste, revisa la consola de Netlify o contáctanos.',
-          `Detalle técnico: ${String(error && error.message ? error.message : 'sin mensaje específico')}`
-        ]
-      })
+      body: JSON.stringify(plan)
+    };
+  } catch (err) {
+    const fallbackPlan = {
+      mode: 'day',
+      plan_name: 'Plan no disponible (error interno)',
+      days: [],
+      shopping_list: [],
+      general_tips: [
+        'Este menú es orientativo y no sustituye el consejo de un profesional sanitario ni de un dietista-nutricionista.',
+        'Ha ocurrido un error interno al generar el menú con Chef-Bot.',
+        'Revisa la configuración de la función en Netlify o vuelve a intentarlo en unos minutos.',
+        'Si quieres que te ayudemos a diseñar un menú adaptado, puedes escribirnos desde https://metabolismix.com/contacto/.'
+      ]
+    };
+
+    return {
+      statusCode: 200,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+      body: JSON.stringify(fallbackPlan)
     };
   }
 };
