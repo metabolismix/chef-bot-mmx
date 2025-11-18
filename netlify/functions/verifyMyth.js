@@ -22,7 +22,6 @@ exports.handler = async function (event, context) {
   // ---------- UTILIDAD RESPUESTA ESTÁNDAR ----------
   const makeCardResponse = (card) => {
     const safe = {
-      // Modo: "recipe" o "week"
       mode: card.mode === "week" ? "week" : "recipe",
 
       // ---- Campos de receta individual ----
@@ -66,7 +65,6 @@ exports.handler = async function (event, context) {
         : [],
     };
 
-    // Empaquetamos en formato tipo Gemini porque tu frontend ya lo espera así
     const text = JSON.stringify(safe);
     const result = {
       candidates: [
@@ -83,7 +81,7 @@ exports.handler = async function (event, context) {
       headers: {
         ...cors,
         "Content-Type": "application/json",
-        "x-chefbot-func-version": "v2-chefbot-2025-11-18b",
+        "x-chefbot-func-version": "v2-chefbot-2025-11-18c",
       },
       body: JSON.stringify(result),
     };
@@ -104,12 +102,10 @@ exports.handler = async function (event, context) {
     const t = text.trim();
     if (!t) return null;
 
-    // 1) intento directo
     try {
       return JSON.parse(t);
     } catch {}
 
-    // 2) array raíz -> primer objeto
     if (t.startsWith("[")) {
       try {
         const a = JSON.parse(t);
@@ -119,7 +115,6 @@ exports.handler = async function (event, context) {
       } catch {}
     }
 
-    // 3) extraer bloque { ... } balanceado
     const start = t.indexOf("{");
     if (start >= 0) {
       let depth = 0;
@@ -163,9 +158,9 @@ exports.handler = async function (event, context) {
         days: [],
         shopping_list: [],
         general_tips: [
-          "No he podido estructurar correctamente el plan semanal a partir de la respuesta de la IA.",
+          "La IA no ha devuelto un plan estructurado completo.",
           reason ||
-            "Se ha generado un plan de respaldo mínimo para no interrumpir la experiencia de uso.",
+            "Se ha generado un plan mínimo de respaldo para no interrumpir la experiencia de uso.",
         ],
         warnings: [],
       };
@@ -437,29 +432,21 @@ Recuerda: responde SOLO con un JSON válido que cumpla el esquema.
         ? result.candidates[0].content.parts[0]
         : {};
 
-    let rawPayload = "";
+    let parsed = null;
 
-    if (typeof firstPart.text === "string" && firstPart.text.trim()) {
-      rawPayload = firstPart.text;
+    // 1) Caso típico con responseMimeType: "application/json" → jsonValue ya es objeto
+    if (firstPart.jsonValue && typeof firstPart.jsonValue === "object") {
+      parsed = firstPart.jsonValue;
     } else if (
       firstPart.functionCall &&
       typeof firstPart.functionCall.args === "string"
     ) {
-      // Por si Gemini devolviera un functionCall con args en JSON string
-      rawPayload = firstPart.functionCall.args;
-    } else if (firstPart.jsonValue && typeof firstPart.jsonValue === "object") {
-      // Caso típico con responseMimeType: "application/json"
-      try {
-        rawPayload = JSON.stringify(firstPart.jsonValue);
-      } catch (e) {
-        console.error(
-          "Error al serializar jsonValue de Gemini:",
-          e && e.message ? e.message : e
-        );
-      }
+      // 2) Por si Gemini usa functionCall
+      parsed = robustParse(stripFences(firstPart.functionCall.args));
+    } else if (typeof firstPart.text === "string") {
+      // 3) Texto crudo
+      parsed = robustParse(stripFences(firstPart.text));
     }
-
-    const parsed = robustParse(stripFences(rawPayload));
 
     if (!parsed || typeof parsed !== "object") {
       console.error(
@@ -475,12 +462,22 @@ Recuerda: responde SOLO con un JSON válido que cumpla el esquema.
       return makeCardResponse(fb);
     }
 
-    // Normalización suave:
+    // ---------- NORMALIZACIÓN ----------
     if (mode === "week") {
+      // Si no hay días, consideramos que la IA no ha estructurado bien el plan
+      if (!Array.isArray(parsed.days) || parsed.days.length === 0) {
+        const fb = buildFallbackRecipe(
+          mode,
+          payload,
+          "La IA no ha incluido días ni comidas en el plan semanal."
+        );
+        return makeCardResponse(fb);
+      }
+
       const plan = {
         mode: "week",
         plan_name: parsed.plan_name || "Plan semanal",
-        days: Array.isArray(parsed.days) ? parsed.days : [],
+        days: parsed.days,
         shopping_list: Array.isArray(parsed.shopping_list)
           ? parsed.shopping_list
           : [],
@@ -489,6 +486,7 @@ Recuerda: responde SOLO con un JSON válido que cumpla el esquema.
           : [],
         warnings: Array.isArray(parsed.warnings) ? parsed.warnings : [],
       };
+
       return makeCardResponse(plan);
     }
 
