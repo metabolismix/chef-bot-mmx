@@ -871,9 +871,10 @@ exports.handler = async function (event, context) {
     return buildResponse(plan, 'v3-chefbot-fallback-no-key');
   }
 
-  // ---------- LLAMADA A GEMINI ----------
-  const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+// ---------- LLAMADA A GEMINI ----------
+const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+
 
   const systemPrompt = `
 Eres un planificador de menús diarios orientativos, no un profesional sanitario.
@@ -1079,4 +1080,5 @@ Genera un único menú de 1 día que siga las reglas anteriores y el formato JSO
 
   return buildResponse(planFromAi, 'v3-chefbot-ai-ok');
 };
+
 
