@@ -1,4 +1,6 @@
 // netlify/functions/verifyMyth.js
+// Chef-Bot: generación de recetas y planes semanales con Gemini (gemini-2.5-flash)
+
 exports.handler = async function (event, context) {
   const cors = {
     "Access-Control-Allow-Origin": "*",
@@ -10,7 +12,6 @@ exports.handler = async function (event, context) {
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 204, headers: cors, body: "" };
   }
-
   if (event.httpMethod !== "POST") {
     return {
       statusCode: 405,
@@ -19,439 +20,500 @@ exports.handler = async function (event, context) {
     };
   }
 
-  // ---------- UTILIDAD RESPUESTA ESTÁNDAR ----------
-  const makeCardResponse = (card) => {
-    const safe = {
-      // Modo: "recipe" o "week"
-      mode: card.mode === "week" ? "week" : "recipe",
+  // ---------- CLAVE Y MODELO ----------
+  const GEMINI_API_KEY =
+    process.env.GOOGLE_API_KEY ||
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY_CHEFBOT;
 
-      // ---- Campos de receta individual ----
-      recipe_name: card.recipe_name || "",
-      prep_minutes:
-        typeof card.prep_minutes === "number" && card.prep_minutes >= 0
-          ? card.prep_minutes
-          : 0,
-      cook_minutes:
-        typeof card.cook_minutes === "number" && card.cook_minutes >= 0
-          ? card.cook_minutes
-          : 0,
-      difficulty: card.difficulty || "Fácil",
-      servings:
-        typeof card.servings === "number" && card.servings > 0
-          ? card.servings
-          : 1,
-      meal_type: card.meal_type || "",
-      ingredients: Array.isArray(card.ingredients) ? card.ingredients : [],
-      steps: Array.isArray(card.steps) ? card.steps : [],
-      meal_summary: card.meal_summary || "",
-      macro_estimate:
-        typeof card.macro_estimate === "object" &&
-        card.macro_estimate !== null
-          ? card.macro_estimate
-          : {
-              calories: null,
-              protein_g: null,
-              carbs_g: null,
-              fat_g: null,
-            },
-      warnings: Array.isArray(card.warnings) ? card.warnings : [],
+  // Modelo por defecto: gemini-2.5-flash
+  const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
-      // ---- Campos de plan semanal ----
-      plan_name: card.plan_name || "",
-      days: Array.isArray(card.days) ? card.days : [],
-      shopping_list: Array.isArray(card.shopping_list)
-        ? card.shopping_list
-        : [],
-      general_tips: Array.isArray(card.general_tips)
-        ? card.general_tips
-        : [],
+  if (!GEMINI_API_KEY) {
+    return {
+      statusCode: 500,
+      headers: { ...cors, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        error:
+          "Falta la clave de la API de Gemini. Configura GOOGLE_API_KEY o GEMINI_API_KEY en Netlify.",
+      }),
     };
+  }
 
-    const text = JSON.stringify(safe);
-    const result = {
+  const API_URL = `https://generativelanguage.googleapis.com/v1/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+
+  // ---------- UTILIDADES COMUNES ----------
+
+  function makeCardResponse(card) {
+    const safeCard = card && typeof card === "object" ? card : {};
+    return {
       candidates: [
         {
           content: {
-            parts: [{ text }],
+            parts: [
+              {
+                text: JSON.stringify(safeCard),
+              },
+            ],
           },
         },
       ],
     };
+  }
 
-    return {
-      statusCode: 200,
-      headers: {
-        ...cors,
-        "Content-Type": "application/json",
-        "x-chefbot-func-version": "v2-chefbot-2025-11-18d",
-      },
-      body: JSON.stringify(result),
-    };
-  };
+  function stripCodeFences(text) {
+    if (!text || typeof text !== "string") return "";
+    return text
+      .replace(/```json/gi, "```")
+      .replace(/```/g, "")
+      .trim();
+  }
 
-  // ---------- UTILIDADES DE PARSEO ----------
-  const stripFences = (t) => {
-    if (!t || typeof t !== "string") return "";
-    let x = t.trim();
-    if (x.startsWith("```")) {
-      x = x.replace(/^```(?:json)?\s*/i, "").replace(/```$/, "");
-    }
-    return x.trim();
-  };
-
-  const robustParse = (text) => {
+  function robustParse(text) {
     if (!text || typeof text !== "string") return null;
-    const t = text.trim();
-    if (!t) return null;
+    const cleaned = stripCodeFences(text);
 
-    // 1) intento directo
     try {
-      return JSON.parse(t);
-    } catch {}
-
-    // 2) array raíz -> primer objeto
-    if (t.startsWith("[")) {
-      try {
-        const a = JSON.parse(t);
-        if (Array.isArray(a) && a.length && typeof a[0] === "object") {
-          return a[0];
-        }
-      } catch {}
-    }
-
-    // 3) extraer bloque { ... } balanceado
-    const start = t.indexOf("{");
-    if (start >= 0) {
-      let depth = 0;
-      let inStr = false;
-      let esc = false;
-      for (let i = start; i < t.length; i++) {
-        const ch = t[i];
-        if (inStr) {
-          if (esc) {
-            esc = false;
-          } else if (ch === "\\") {
-            esc = true;
-          } else if (ch === '"') {
-            inStr = false;
-          }
-        } else {
-          if (ch === '"') inStr = true;
-          else if (ch === "{") depth++;
-          else if (ch === "}") {
-            depth--;
-            if (depth === 0) {
-              const snippet = t.slice(start, i + 1);
-              try {
-                return JSON.parse(snippet);
-              } catch {}
-              break;
-            }
-          }
+      return JSON.parse(cleaned);
+    } catch {
+      // Intento de rescatar el primer objeto JSON que aparezca
+      const firstBrace = cleaned.indexOf("{");
+      const lastBrace = cleaned.lastIndexOf("}");
+      if (firstBrace >= 0 && lastBrace > firstBrace) {
+        const candidate = cleaned.slice(firstBrace, lastBrace + 1);
+        try {
+          return JSON.parse(candidate);
+        } catch {
+          // ignorar
         }
       }
+      return null;
     }
+  }
 
-    return null;
-  };
+  function normalizeRecipe(raw, forcedMode) {
+    const macro =
+      raw && typeof raw.macro_estimate === "object"
+        ? raw.macro_estimate
+        : {};
 
-  const buildFallback = (mode, payload, reason) => {
-    if (mode === "week") {
-      return {
-        mode: "week",
-        plan_name: "Plan de respaldo",
-        days: [],
-        shopping_list: [],
-        general_tips: [
-          "Chef-Bot no ha podido generar el plan semanal con la IA en este momento.",
-          "Los servidores externos de IA (Gemini) están devolviendo errores o están saturados. No es un fallo de Chef-Bot, de tu configuración ni de tus datos. Prueba a generar el plan de nuevo en unos minutos.",
-          reason || "Error desconocido al llamar a la API de IA.",
-        ],
-        warnings: [],
-      };
+    const ingredients = Array.isArray(raw?.ingredients)
+      ? raw.ingredients
+          .filter((i) => i && typeof i === "object")
+          .map((i) => ({
+            name: String(i.name || "").trim(),
+            amount: String(i.amount || "").trim(),
+            unit: String(i.unit || "").trim(),
+            group: String(i.group || "").trim(),
+          }))
+          .filter((i) => i.name)
+      : [];
+
+    const steps = Array.isArray(raw?.steps)
+      ? raw.steps.filter((s) => typeof s === "string" && s.trim())
+      : [];
+
+    const warnings = Array.isArray(raw?.warnings)
+      ? raw.warnings.filter((s) => typeof s === "string" && s.trim())
+      : [];
+
+    const prepMinutes =
+      Number.isFinite(raw?.prep_minutes) && raw.prep_minutes >= 0
+        ? raw.prep_minutes
+        : 10;
+    const cookMinutes =
+      Number.isFinite(raw?.cook_minutes) && raw.cook_minutes >= 0
+        ? raw.cook_minutes
+        : 10;
+    const servings =
+      Number.isFinite(raw?.servings) && raw.servings > 0
+        ? raw.servings
+        : 1;
+
+    return {
+      mode: forcedMode || raw?.mode || "recipe",
+      recipe_name: String(
+        raw?.recipe_name || raw?.title || "Receta generada por Chef-Bot"
+      ).trim(),
+      prep_minutes: prepMinutes,
+      cook_minutes: cookMinutes,
+      difficulty:
+        typeof raw?.difficulty === "string" && raw.difficulty.trim()
+          ? raw.difficulty.trim()
+          : "Fácil",
+      servings,
+      meal_type:
+        typeof raw?.meal_type === "string" && raw.meal_type.trim()
+          ? raw.meal_type.trim()
+          : "",
+      ingredients,
+      steps,
+      meal_summary:
+        typeof raw?.meal_summary === "string" ? raw.meal_summary : "",
+      macro_estimate: {
+        calories: Number.isFinite(macro.calories) ? macro.calories : null,
+        protein_g: Number.isFinite(macro.protein_g) ? macro.protein_g : null,
+        carbs_g: Number.isFinite(macro.carbs_g) ? macro.carbs_g : null,
+        fat_g: Number.isFinite(macro.fat_g) ? macro.fat_g : null,
+      },
+      warnings,
+    };
+  }
+
+  function buildFallbackRecipe(technicalErrorMessage) {
+    const warnings = [
+      "Chef-Bot no ha podido generar una receta detallada con la IA en este momento.",
+      "Los servidores externos de IA (Gemini) están devolviendo errores o están saturados. No es un fallo de Chef-Bot ni de tu configuración. Prueba de nuevo en unos minutos.",
+    ];
+    if (technicalErrorMessage) {
+      warnings.push(
+        `Detalle técnico (para depuración): ${technicalErrorMessage}`
+      );
     }
-
-    // Fallback receta (por compatibilidad, aunque ahora chef-bot usa modo week)
-    const ingText = (payload && payload.ingredientsText) || "";
-    const items = ingText
-      ? ingText
-          .split(/[,\n]/)
-          .map((x) => x.trim())
-          .filter(Boolean)
-      : ["Ingredientes que ya tienes a mano"];
 
     return {
       mode: "recipe",
-      recipe_name: "Receta simplificada",
-      prep_minutes: 0,
-      cook_minutes: 0,
+      recipe_name: "Receta de respaldo - Chef-Bot",
+      prep_minutes: 5,
+      cook_minutes: 10,
       difficulty: "Fácil",
-      servings: (payload && payload.servings) || 1,
-      ingredients: items.map((name) => ({
-        name,
-        quantity_grams: null,
-        notes: "",
-      })),
+      servings: 1,
+      meal_type: "",
+      ingredients: [],
       steps: [
-        "Prepara una comida sencilla utilizando los ingredientes que ya tienes a mano.",
-        "Cuando la configuración de la IA esté corregida, vuelve a intentar generar una receta con Chef-Bot.",
+        "En este momento la IA externa (Gemini) no ha podido generar una receta.",
+        "Vuelve a intentar la generación en unos minutos, cuando los servidores estén menos saturados.",
       ],
       meal_summary:
-        "No he podido estructurar la respuesta de la IA, así que te propongo una receta simplificada basada en los ingredientes.",
-      warnings: [
-        reason ||
-          "La respuesta original del modelo no se ha podido convertir a un JSON válido.",
-        "Se ha generado una receta de respaldo para no interrumpir la experiencia de uso.",
-      ],
+        "Receta de respaldo mostrada porque la IA externa no está disponible.",
       macro_estimate: {
         calories: null,
         protein_g: null,
         carbs_g: null,
         fat_g: null,
       },
+      warnings,
     };
-  };
+  }
 
+  function buildFallbackPlan(technicalErrorMessage) {
+    const base = buildFallbackRecipe(technicalErrorMessage);
+    return {
+      mode: "week",
+      plan_name: "Plan de respaldo - Chef-Bot",
+      days: [],
+      shopping_list: [],
+      general_tips: base.warnings,
+    };
+  }
+
+  function normalizePlanOrRecipe(mode, raw) {
+    if (mode === "week") {
+      const safeDays = Array.isArray(raw?.days) ? raw.days : [];
+      const days = safeDays
+        .filter((d) => d && typeof d === "object")
+        .map((d, index) => ({
+          day_name:
+            typeof d.day_name === "string" && d.day_name.trim()
+              ? d.day_name.trim()
+              : `Día ${index + 1}`,
+          meals: Array.isArray(d.meals)
+            ? d.meals.map((m) => normalizeRecipe(m, "recipe"))
+            : [],
+        }));
+
+      const shoppingList = Array.isArray(raw?.shopping_list)
+        ? raw.shopping_list
+            .filter((i) => i && typeof i === "object")
+            .map((i) => ({
+              name: String(i.name || "").trim(),
+              quantity: String(i.quantity || "").trim(),
+              category: String(i.category || "").trim(),
+            }))
+            .filter((i) => i.name)
+        : [];
+
+      const generalTips = Array.isArray(raw?.general_tips)
+        ? raw.general_tips.filter(
+            (t) => typeof t === "string" && t.trim()
+          )
+        : [];
+
+      return {
+        mode: "week",
+        plan_name:
+          typeof raw?.plan_name === "string" && raw.plan_name.trim()
+            ? raw.plan_name.trim()
+            : "Plan semanal generado por Chef-Bot",
+        days,
+        shopping_list: shoppingList,
+        general_tips: generalTips,
+      };
+    }
+
+    // Por defecto, tratamos como receta
+    return normalizeRecipe(raw, "recipe");
+  }
+
+  async function callGemini(requestBody) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000); // 10s
+
+    try {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+
+      const text = await response.text();
+      let json = {};
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = {};
+      }
+
+      if (!response.ok) {
+        const message =
+          (json && json.error && json.error.message) || text || "Unknown error";
+        const err = new Error(`Gemini ${response.status}: ${message}`);
+        err.statusCode = response.status;
+        throw err;
+      }
+
+      return json;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  // ---------- PROMPT DE SISTEMA (EMBUTIDO EN EL MENSAJE DEL USUARIO) ----------
+
+  const systemPrompt = `
+Eres Chef-Bot, un asistente de nutrición que genera planes de comidas y recetas en castellano, pensado para dieta mediterránea y vida real.
+
+OBJETIVO GENERAL:
+- A partir de los datos del usuario (objetivos de macros, restricciones dietéticas, ingredientes disponibles, tipo de comida, etc.), debes generar:
+  - Modo "week": un PLAN SEMANAL completo, coherente y realista.
+  - Modo "recipe": una RECETA individual detallada.
+
+ESTILO Y FILOSOFÍA:
+- Cocina mediterránea, casera, realista y de diario.
+- Evita combinaciones raras o poco apetecibles (por ejemplo, atún con plátano y espinacas en el desayuno).
+- Usa combinaciones que una persona realmente comería en un contexto europeo/mediterráneo.
+- Respeta las restricciones dietéticas indicadas (vegano, vegetariano, sin lácteos, sin gluten, etc.).
+- Respeta al máximo los objetivos de macros, pero siempre priorizando que la receta o el plan tengan sentido culinario y cultural.
+
+REGLAS PARA LOS MACROS:
+- Intenta ajustar los macros diarios al objetivo del usuario, sumando todas las comidas del día.
+- No hace falta clavar los valores al milímetro, pero intenta que el total diario quede razonablemente cerca del objetivo.
+- Si debes desviarte un poco para mantener recetas realistas, hazlo, pero manteniendo un buen equilibrio de proteína, hidratos y grasas.
+
+INGREDIENTES Y NEVERA:
+- Si el usuario indica ingredientes disponibles en la nevera o despensa, priorízalos.
+- No inventes ingredientes exóticos si el usuario pide cosas simples.
+- Usa cantidades razonables y redondas (gramos, cucharadas, unidades).
+
+FORMATO DE RESPUESTA:
+- Debes responder SIEMPRE con UN ÚNICO OBJETO JSON VÁLIDO.
+- NO incluyas explicaciones fuera del JSON.
+- NO añadas texto antes o después del JSON.
+- No uses comentarios ni campos adicionales que no se pidan.
+
+ESTRUCTURA JSON ESPERADA:
+
+1) MODO "week" (plan semanal):
+{
+  "mode": "week",
+  "plan_name": "string",
+  "days": [
+    {
+      "day_name": "Lunes",
+      "meals": [
+        {
+          "recipe_name": "string",
+          "prep_minutes": number,
+          "cook_minutes": number,
+          "difficulty": "Fácil" | "Media" | "Difícil",
+          "servings": number,
+          "meal_type": "desayuno" | "comida" | "cena" | "snack",
+          "ingredients": [
+            {
+              "name": "string",
+              "amount": "string",
+              "unit": "string",
+              "group": "string"
+            }
+          ],
+          "steps": ["string", "..."],
+          "meal_summary": "string",
+          "macro_estimate": {
+            "calories": number,
+            "protein_g": number,
+            "carbs_g": number,
+            "fat_g": number
+          },
+          "warnings": ["string", "..."]
+        }
+      ]
+    }
+  ],
+  "shopping_list": [
+    {
+      "name": "string",
+      "quantity": "string",
+      "category": "string"
+    }
+  ],
+  "general_tips": ["string", "..."]
+}
+
+2) MODO "recipe" (receta individual):
+{
+  "mode": "recipe",
+  "recipe_name": "string",
+  "prep_minutes": number,
+  "cook_minutes": number,
+  "difficulty": "Fácil" | "Media" | "Difícil",
+  "servings": number,
+  "meal_type": "desayuno" | "comida" | "cena" | "snack",
+  "ingredients": [
+    {
+      "name": "string",
+      "amount": "string",
+      "unit": "string",
+      "group": "string"
+    }
+  ],
+  "steps": ["string", "..."],
+  "meal_summary": "string",
+  "macro_estimate": {
+    "calories": number,
+    "protein_g": number,
+    "carbs_g": number,
+    "fat_g": number
+  },
+  "warnings": ["string", "..."]
+}
+
+NO uses campos adicionales fuera de estas estructuras. Si algún dato no lo conoces con precisión, puedes aproximarlo o dejarlo en null.
+  `.trim();
+
+  // ---------- PARSE DEL BODY ----------
+  let parsedBody = {};
   try {
-    // ---------- INPUT ----------
-    const parsedBody = JSON.parse(event.body || "{}");
+    parsedBody = JSON.parse(event.body || "{}");
+  } catch {
+    parsedBody = {};
+  }
 
-    // Compatibilidad: si viene el formato viejo { recipeRequest: ... }, lo tratamos como receta
-    let mode = "week";
-    let payload = {};
+  const mode = parsedBody.mode === "week" ? "week" : "recipe";
+  const payload =
+    parsedBody && typeof parsedBody.payload === "object" && parsedBody.payload
+      ? parsedBody.payload
+      : {};
 
-    if (parsedBody && parsedBody.mode === "recipe") {
-      mode = "recipe";
-      payload =
-        typeof parsedBody.payload === "object" && parsedBody.payload !== null
-          ? parsedBody.payload
-          : {};
-    } else if (parsedBody && parsedBody.mode === "week") {
-      mode = "week";
-      payload =
-        typeof parsedBody.payload === "object" && parsedBody.payload !== null
-          ? parsedBody.payload
-          : {};
-    } else if (parsedBody && parsedBody.recipeRequest) {
-      mode = "recipe";
-      payload = parsedBody.recipeRequest;
-    }
-
-    const GEMINI_API_KEY = process.env.GOOGLE_API_KEY;
-    if (!GEMINI_API_KEY) {
-      const fb = buildFallback(
-        mode,
-        payload,
-        "Falta GOOGLE_API_KEY en las variables de entorno del servidor."
-      );
-      return makeCardResponse(fb);
-    }
-
-    // ---------- CONFIG GEMINI v1 ----------
-    const MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash-latest";
-    const API_URL = `https://generativelanguage.googleapis.com/v1/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-
-    const systemPrompt = `
-Actúas como CHEF-BOT, un asistente de cocina en español.
-
-Tu tarea es generar SIEMPRE una respuesta en formato JSON ESTRICTO, sin texto adicional, sin backticks y sin explicaciones fuera del JSON.
-
-Hay dos modos:
-1) "recipe"  -> una receta individual detallada.
-2) "week"    -> un plan semanal simple con varias comidas por día.
-
-REGLAS IMPORTANTES:
-- No añadas texto fuera del JSON.
-- No uses comentarios, ni //, ni bloques tipo \`\`\`json.
-- Si la información nutricional no es fiable, deja los campos de macros en null.
-- No hagas recomendaciones médicas; limítate a cocina y organización de comidas.
-- Respeta la dieta mediterránea y recetas realistas, evitando combinaciones raras.
-`;
-
-    const userPrompt = `
-MODO: ${mode}
-
+  const userPrompt =
+    mode === "week"
+      ? `
 DATOS DEL USUARIO (JSON):
 ${JSON.stringify(payload, null, 2)}
 
-Objetivo:
-- Si el modo es "recipe", genera una RECETA CONCRETA en español, sencilla y realista, respetando en lo posible sus preferencias, restricciones y macros objetivo.
-- Si el modo es "week", genera un PLAN SEMANAL resumen con varios platos por día (no hace falta dar el paso a paso de todas las recetas, pero sí títulos y descripciones coherentes con macros y restricciones).
+TAREA:
+Genera un plan semanal completo ("mode": "week") siguiendo estrictamente la estructura indicada en las instrucciones de sistema.
+Ajusta al máximo los macros diarios objetivo, manteniendo recetas mediterráneas realistas y apetecibles.
+Evita combinaciones raras o chocantes.
+    `.trim()
+      : `
+DATOS DEL USUARIO (JSON):
+${JSON.stringify(payload, null, 2)}
 
-Recuerda: responde SOLO con un JSON válido. Nada de texto fuera del JSON.
-`;
+TAREA:
+Genera una receta individual ("mode": "recipe") siguiendo estrictamente la estructura indicada en las instrucciones de sistema.
+Ajusta la receta a los macros y restricciones del usuario, con ingredientes y pasos realistas.
+    `.trim();
 
-    const requestBody = {
-      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-      // ⚠️ NOMBRE CORRECTO EN v1: system_instruction (snake_case)
-      system_instruction: { role: "system", parts: [{ text: systemPrompt }] },
-      generation_config: {
-        temperature: mode === "week" ? 0.4 : 0.35,
-        topP: 0.9,
-        topK: 32,
-        maxOutputTokens: 2048,
+  const fullPrompt = `${systemPrompt}\n\n---\n\n${userPrompt}`;
+
+  const requestBody = {
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: fullPrompt }],
       },
-    };
+    ],
+    generation_config: {
+      temperature: mode === "week" ? 0.55 : 0.4,
+      top_p: 0.9,
+      top_k: 32,
+      max_output_tokens: 2048,
+    },
+  };
 
-    // ---------- LLAMADA A GEMINI CON PEQUEÑO SISTEMA DE REINTENTOS ----------
-    const MAX_RETRIES = 2;
-    const TIMEOUT_MS = parseInt(process.env.GEMINI_TIMEOUT_MS || "8000", 10);
+  // ---------- LLAMADA A GEMINI CON REINTENTOS ----------
+  const MAX_RETRIES = 3;
+  let geminiResponse = null;
+  let lastError = null;
 
-    let lastError = null;
-    let result = null;
-    let ok = false;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      geminiResponse = await callGemini(requestBody);
+      break; // éxito
+    } catch (err) {
+      lastError = err;
+      const status =
+        typeof err.statusCode === "number" ? err.statusCode : null;
 
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(
-          () => controller.abort(),
-          TIMEOUT_MS
-        );
-
-        const res = await fetch(API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(requestBody),
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-
-        const json = await res.json().catch(() => ({}));
-
-        if (!res.ok) {
-          const msg = json?.error?.message || "";
-          const code = json?.error?.code || res.status || 0;
-
-          // Guardamos el último error legible
-          lastError = `La API de Gemini ha devuelto un error: Gemini ${code}: ${msg || "sin detalle"}.`;
-
-          // Si es 503/overloaded o 500, intentamos reintentar
-          if (code === 503 || code === 500) {
-            if (attempt < MAX_RETRIES) {
-              continue;
-            }
-          }
-
-          // Otros códigos (400 etc.) no se van a arreglar con reintentos
-          break;
-        }
-
-        // Si res.ok
-        result = json;
-        ok = true;
+      // Si es 4xx (excepto 429) no tiene sentido reintentar
+      if (status && status >= 400 && status < 500 && status !== 429) {
         break;
-      } catch (err) {
-        lastError =
-          lastError ||
-          `La llamada a la API de Gemini ha fallado o ha excedido el tiempo máximo configurado. Detalle: ${
-            err?.message || String(err)
-          }`;
-
-        // Si es timeout / abort, reintentamos hasta MAX_RETRIES
-        if (attempt < MAX_RETRIES) {
-          continue;
-        }
       }
-    }
 
-    if (!ok || !result) {
-      const fb = buildFallback(mode, payload, lastError);
-      return makeCardResponse(fb);
-    }
-
-    // ---------- PARSEO DE LA RESPUESTA DEL MODELO ----------
-    const rawText =
-      result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    const parsed = robustParse(stripFences(rawText));
-
-    if (!parsed || typeof parsed !== "object") {
-      const fb = buildFallback(
-        mode,
-        payload,
-        "La respuesta original del modelo no se ha podido convertir a un JSON válido."
-      );
-      return makeCardResponse(fb);
-    }
-
-    if (mode === "week") {
-      const plan = {
-        mode: "week",
-        plan_name: parsed.plan_name || "Plan semanal",
-        days: Array.isArray(parsed.days) ? parsed.days : [],
-        shopping_list: Array.isArray(parsed.shopping_list)
-          ? parsed.shopping_list
-          : [],
-        general_tips: Array.isArray(parsed.general_tips)
-          ? parsed.general_tips
-          : [],
-        warnings: Array.isArray(parsed.warnings) ? parsed.warnings : [],
-      };
-
-      // Si no hay días, consideramos que la IA ha fallado estructuralmente
-      if (!plan.days.length) {
-        const fb = buildFallback(
-          mode,
-          payload,
-          "La IA no ha devuelto un plan estructurado completo (sin días)."
+      if (attempt < MAX_RETRIES) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, attempt * 600)
         );
-        return makeCardResponse(fb);
       }
-
-      return makeCardResponse(plan);
     }
-
-    // mode === "recipe"
-    const recipe = {
-      mode: "recipe",
-      recipe_name: parsed.recipe_name || "Receta sin título",
-      prep_minutes:
-        typeof parsed.prep_minutes === "number" ? parsed.prep_minutes : 0,
-      cook_minutes:
-        typeof parsed.cook_minutes === "number" ? parsed.cook_minutes : 0,
-      difficulty: parsed.difficulty || "Fácil",
-      servings:
-        typeof parsed.servings === "number" && parsed.servings > 0
-          ? parsed.servings
-          : (payload.servings || 1),
-      meal_type: parsed.meal_type || payload.mealType || "Comida",
-      ingredients: Array.isArray(parsed.ingredients)
-        ? parsed.ingredients
-        : [],
-      steps: Array.isArray(parsed.steps) ? parsed.steps : [],
-      meal_summary: parsed.meal_summary || "",
-      macro_estimate:
-        typeof parsed.macro_estimate === "object" &&
-        parsed.macro_estimate !== null
-          ? parsed.macro_estimate
-          : {
-              calories: null,
-              protein_g: null,
-              carbs_g: null,
-              fat_g: null,
-            },
-      warnings: Array.isArray(parsed.warnings) ? parsed.warnings : [],
-    };
-
-    if (!recipe.ingredients.length || !recipe.steps.length) {
-      const fb = buildFallback(
-        mode,
-        payload,
-        "La respuesta de la IA no incluía suficientes ingredientes o pasos estructurados."
-      );
-      return makeCardResponse(fb);
-    }
-
-    return makeCardResponse(recipe);
-  } catch (error) {
-    const fb = buildFallback(
-      "week",
-      null,
-      `Se produjo una excepción interna en la función del servidor: ${
-        error?.message || String(error)
-      }.`
-    );
-    return makeCardResponse(fb);
   }
+
+  let normalized;
+
+  if (geminiResponse) {
+    const rawText =
+      geminiResponse?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const parsed = robustParse(rawText);
+
+    if (parsed && typeof parsed === "object") {
+      normalized = normalizePlanOrRecipe(mode, parsed);
+    } else {
+      const technical =
+        "La IA ha respondido en un formato no JSON parseable.";
+      normalized =
+        mode === "week"
+          ? buildFallbackPlan(technical)
+          : buildFallbackRecipe(technical);
+    }
+  } else {
+    const technicalError =
+      lastError && lastError.message
+        ? lastError.message
+        : "Error desconocido en la llamada a Gemini.";
+    normalized =
+      mode === "week"
+        ? buildFallbackPlan(technicalError)
+        : buildFallbackRecipe(technicalError);
+  }
+
+  const body = JSON.stringify(makeCardResponse(normalized));
+
+  return {
+    statusCode: 200,
+    headers: { ...cors, "Content-Type": "application/json" },
+    body,
+  };
 };
