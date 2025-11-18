@@ -49,8 +49,8 @@
             background-color: #e0f7fa; /* Turquesa muy claro */
             border: 2px dashed #00b8d4;
         }
-        
-        /* Estilos para el selector de opciones */
+
+        /* Estilos para el selector de opciones (por si en el futuro quieres reintroducir opciones) */
         .option-selector input[type="radio"]:checked + label {
             background-color: #00b8d4;
             color: white;
@@ -105,7 +105,7 @@
                 </div>
             </div>
 
-            <!-- Selector de Número de Comidas -->
+            <!-- Selector de Número de Comidas y Días + Restricciones -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <!-- Comidas Diarias -->
                 <div>
@@ -170,16 +170,7 @@
     </div>
 
     <script>
-        // Variable global para guardar el plan generado
-        let currentPlanData = null;
-
-        // Funciones auxiliares para el acordeón de recetas
-        window.toggleRecipeDetails = function(id) {
-            const element = document.getElementById(id);
-            element.classList.toggle('hidden');
-        };
-        
-        // Elementos DOM
+        // Referencias a elementos del DOM
         const targetProteinInput = document.getElementById('targetProtein');
         const targetFatInput = document.getElementById('targetFat');
         const targetCarbsInput = document.getElementById('targetCarbs');
@@ -194,333 +185,10 @@
         const numDaysToPlanSelector = document.getElementById('numDaysToPlan');
         const menusTitle = document.getElementById('menusTitle');
 
-        // Base de datos de alimentos (macros por 100 g, peso en crudo)
-        const foodDatabase = {
-            'pechuga de pollo': { protein: 31, fat: 3.6, carbs: 0, category: 'main_protein', type: 'meat' },
-            'arroz integral': { protein: 3.5, fat: 0.9, carbs: 77, category: 'complex_carb', type: 'grain' },
-            'salmón': { protein: 20, fat: 13, carbs: 0, category: 'main_protein', type: 'fish' },
-            'boniato': { protein: 1.6, fat: 0.1, carbs: 20, category: 'complex_carb', type: 'vegetable_root' },
-            'avena': { protein: 17, fat: 7, carbs: 66, category: 'breakfast_carb', type: 'grain' },
-            'proteína en polvo': { protein: 80, fat: 5, carbs: 10, category: 'quick_protein', type: 'powder' },
-            'lentejas cocidas': { protein: 9, fat: 0.4, carbs: 20, category: 'main_protein', type: 'legume' },
-            'aceite de oliva': { protein: 0, fat: 100, carbs: 0, category: 'pure_fat', type: 'oil' },
-            'atún en agua': { protein: 24, fat: 1.3, carbs: 0, category: 'quick_protein', type: 'fish_canned' },
-            'aguacate': { protein: 2, fat: 15, carbs: 9, category: 'natural_fat', type: 'fruit' },
-            'yogur griego natural': { protein: 10, fat: 5, carbs: 4, category: 'dairy_protein', type: 'dairy' },
-            'frutos rojos': { protein: 0.7, fat: 0.4, carbs: 12, category: 'fruit_carb', type: 'fruit' },
-            'nueces': { protein: 15, fat: 65, carbs: 14, category: 'natural_fat', type: 'nut' },
-            'pan integral': { protein: 13, fat: 3.6, carbs: 49, category: 'breakfast_carb', type: 'bread' },
-            'pechuga de pavo en lonchas': { protein: 29, fat: 1.5, carbs: 0, category: 'quick_protein', type: 'cured_meat' },
-            'queso cottage': { protein: 11, fat: 4.5, carbs: 3.4, category: 'dairy_protein', type: 'dairy' },
-            'huevo': { protein: 12.6, fat: 9.9, carbs: 0.8, category: 'quick_protein', type: 'egg' },
-            'espinacas': { protein: 2.9, fat: 0.4, carbs: 3.6, category: 'vegetable', type: 'leaf' },
-            'pasta integral': { protein: 13, fat: 2.5, carbs: 65, category: 'complex_carb', type: 'grain' },
-            'pescado blanco': { protein: 20, fat: 1.5, carbs: 0, category: 'main_protein', type: 'fish' },
-            'tofu firme': { protein: 15, fat: 8, carbs: 2.5, category: 'main_protein', type: 'vegan' },
-            'ternera magra': { protein: 26, fat: 8, carbs: 0, category: 'main_protein', type: 'meat' },
-            'brócoli': { protein: 2.8, fat: 0.4, carbs: 6.6, category: 'vegetable', type: 'flower' },
-            'plátano': { protein: 1.1, fat: 0.3, carbs: 23, category: 'fruit_carb', type: 'fruit' },
-            'mantequilla de cacahuete': { protein: 25, fat: 50, carbs: 20, category: 'natural_fat', type: 'butter' },
-            'garbanzos cocidos': { protein: 9, fat: 2.6, carbs: 27, category: 'main_protein', type: 'legume' },
-            'quinoa cocida': { protein: 4.4, fat: 1.9, carbs: 19, category: 'complex_carb', type: 'grain' },
-            'queso feta': { protein: 14, fat: 21, carbs: 4, category: 'dairy_protein', type: 'dairy' },
-            'leche de almendras': { protein: 0.4, fat: 1.1, carbs: 0.2, category: 'liquid', type: 'liquid' },
-            'semillas de chía': { protein: 17, fat: 31, carbs: 42, category: 'natural_fat', type: 'seed' },
-            'lomo de cerdo magro': { protein: 27, fat: 7, carbs: 0, category: 'main_protein', type: 'meat' },
-            'patata cocida': { protein: 2, fat: 0.1, carbs: 17, category: 'complex_carb', type: 'vegetable_root' },
-            'tomate': { protein: 0.9, fat: 0.2, carbs: 3.9, category: 'vegetable', type: 'fruit' },
-            'pimiento rojo': { protein: 1, fat: 0.3, carbs: 6, category: 'vegetable', type: 'fruit' },
-            'bacalao desalado': { protein: 23, fat: 0.8, carbs: 0, category: 'main_protein', type: 'fish' },
-            'cuscús integral': { protein: 12, fat: 2, carbs: 77, category: 'complex_carb', type: 'grain' },
-            'merluza': { protein: 18, fat: 1.2, carbs: 0, category: 'main_protein', type: 'fish' },
-            'gambas cocidas': { protein: 24, fat: 0.3, carbs: 0.2, category: 'quick_protein', type: 'seafood' },
-            'soja texturizada': { protein: 50, fat: 1.2, carbs: 33, category: 'main_protein', type: 'vegan' },
-            'seitán': { protein: 75, fat: 2, carbs: 14, category: 'main_protein', type: 'vegan' },
-            'caballa': { protein: 19, fat: 14, carbs: 0, category: 'main_protein', type: 'fish' },
-            'jamón serrano magro': { protein: 30, fat: 10, carbs: 0.2, category: 'quick_protein', type: 'cured_meat' },
-            'maíz': { protein: 3.4, fat: 1.2, carbs: 19, category: 'complex_carb', type: 'grain' },
-            'pan de centeno': { protein: 8, fat: 2.5, carbs: 48, category: 'breakfast_carb', type: 'bread' }
-        };
-        
-        // Ingredientes prohibidos para ciertas dietas estándar
-        const restrictedFoods = {
-            'vegano': [
-                'pechuga de pollo', 'salmón', 'atún en agua', 'yogur griego natural',
-                'pechuga de pavo en lonchas', 'queso cottage', 'huevo', 'pescado blanco',
-                'ternera magra', 'lomo de cerdo magro', 'bacalao desalado', 'merluza',
-                'gambas cocidas', 'caballa', 'jamón serrano magro', 'queso feta'
-            ],
-            'vegetariano': [
-                'pechuga de pollo', 'salmón', 'atún en agua', 'pechuga de pavo en lonchas',
-                'pescado blanco', 'ternera magra', 'lomo de cerdo magro', 'bacalao desalado',
-                'merluza', 'gambas cocidas', 'caballa', 'jamón serrano magro'
-            ],
-            'sin gluten': ['pan integral', 'pasta integral', 'cuscús integral', 'avena', 'pan de centeno', 'seitán']
-        };
+        // Estado actual del plan
+        let currentPlanData = null;
 
-        /**
-         * Construye el conjunto de alimentos prohibidos a partir del texto libre
-         * introducido en "Restricciones dietéticas".
-         * 
-         * Reglas:
-         * - Si se introduce una dieta genérica (vegano, vegetariano, sin gluten, celiaquía…),
-         *   se aplican las listas estándar.
-         * - Si se introducen intolerancias o alergias (lactosa, frutos secos, marisco, soja…),
-         *   se bloquean los alimentos correspondientes.
-         * - Si se escriben alimentos concretos (huevo, plátano, ternera…), se bloquean
-         *   esos alimentos aunque no haya una etiqueta de dieta.
-         */
-        function buildForbiddenFoodsFromFilter(rawText) {
-            const forbidden = new Set();
-            if (!rawText) return forbidden;
-
-            const text = rawText.toLowerCase().trim();
-            if (!text || text === 'ninguna' || text === 'ninguno' || text === 'sin restricciones') {
-                return forbidden;
-            }
-
-            const addList = (arr) => Array.isArray(arr) && arr.forEach((item) => forbidden.add(item));
-
-            // Dietas generales
-            if (text.includes('vegano') || text.includes('vegana')) {
-                addList(restrictedFoods['vegano'] || []);
-            }
-            if (text.includes('vegetariano') || text.includes('vegetariana')) {
-                addList(restrictedFoods['vegetariano'] || []);
-            }
-            if (
-                text.includes('celiac') ||
-                text.includes('celiaqu') ||
-                text.includes('sin gluten') ||
-                /\bgluten\b/.test(text)
-            ) {
-                addList(restrictedFoods['sin gluten'] || []);
-            }
-
-            // Intolerancia a la lactosa / lácteos
-            if (
-                text.includes('lactosa') ||
-                text.includes('intolerancia a la lactosa') ||
-                text.includes('sin lactosa')
-            ) {
-                ['yogur griego natural', 'queso cottage', 'queso feta'].forEach((f) => forbidden.add(f));
-            }
-
-            // Frutos secos / cacahuetes / semillas
-            if (
-                text.includes('frutos secos') ||
-                text.includes('fruto seco') ||
-                text.includes('cacahuete') ||
-                text.includes('cacahuetes') ||
-                text.includes('nuez') ||
-                text.includes('nueces')
-            ) {
-                ['nueces', 'mantequilla de cacahuete', 'semillas de chía'].forEach((f) => forbidden.add(f));
-            }
-
-            // Marisco / crustáceos
-            if (
-                text.includes('marisco') ||
-                text.includes('crustáce') ||
-                text.includes('gamba') ||
-                text.includes('gambas')
-            ) {
-                ['gambas cocidas'].forEach((f) => forbidden.add(f));
-            }
-
-            // Soja
-            if (text.includes('soja')) {
-                ['soja texturizada'].forEach((f) => forbidden.add(f));
-            }
-
-            // Procesar palabras o elementos separados por coma / punto y coma
-            const tokens = text
-                .split(/[,;\/]/)
-                .map((t) => t.trim())
-                .filter(Boolean);
-
-            for (const tok of tokens) {
-                if (!tok || tok === 'ninguna' || tok === 'ninguno') continue;
-
-                // Omitir tokens genéricos ya tratados
-                if (
-                    tok.includes('vegano') ||
-                    tok.includes('vegana') ||
-                    tok.includes('vegetaria') ||
-                    tok.includes('celiac') ||
-                    tok.includes('celiaqu') ||
-                    tok.includes('gluten') ||
-                    tok.includes('lactosa') ||
-                    tok.includes('frutos secos') ||
-                    tok.includes('fruto seco') ||
-                    tok.includes('marisco') ||
-                    tok.includes('crustáce') ||
-                    tok.includes('soja')
-                ) {
-                    continue;
-                }
-
-                // Intentar emparejar alimentos concretos
-                Object.keys(foodDatabase).forEach((foodName) => {
-                    const f = foodName.toLowerCase();
-                    if (f.includes(tok) || tok.includes(f)) {
-                        forbidden.add(foodName);
-                    }
-                });
-            }
-
-            return forbidden;
-        }
-        
-        // Mapeo de categorías a tipos de comida
-        const mealTypeRestrictions = {
-            'Desayuno': {
-                protein: ['quick_protein', 'dairy_protein'],
-                carb: ['breakfast_carb', 'fruit_carb'],
-                fat: ['natural_fat', 'pure_fat'],
-                misc: ['vegetable', 'liquid']
-            },
-            'Media Mañana': {
-                protein: ['quick_protein', 'dairy_protein'],
-                carb: ['fruit_carb', 'breakfast_carb'],
-                fat: ['natural_fat'],
-                misc: ['liquid']
-            },
-            'Almuerzo': {
-                protein: ['main_protein', 'quick_protein'],
-                carb: ['complex_carb', 'breakfast_carb'], 
-                fat: ['pure_fat', 'natural_fat'],
-                misc: ['vegetable']
-            },
-            'Merienda': {
-                protein: ['quick_protein', 'dairy_protein'],
-                carb: ['fruit_carb', 'breakfast_carb'],
-                fat: ['natural_fat'],
-                misc: ['liquid']
-            },
-            'Cena': {
-                protein: ['main_protein', 'quick_protein'],
-                carb: ['complex_carb'],
-                fat: ['pure_fat', 'natural_fat'],
-                misc: ['vegetable']
-            },
-            'Post-Cena': {
-                protein: ['quick_protein', 'dairy_protein'],
-                carb: ['fruit_carb'],
-                fat: ['natural_fat'],
-                misc: ['liquid']
-            },
-            'Comida Única': {
-                protein: ['main_protein', 'quick_protein'],
-                carb: ['complex_carb'],
-                fat: ['pure_fat', 'natural_fat'],
-                misc: ['vegetable']
-            }
-        };
-
-        // --- DISTRIBUCIONES DINÁMICAS POR NÚMERO DE COMIDAS ---
-        const mealDistributions = {
-            1: [
-                { name: 'Comida Única', p: 100, f: 100, c: 100 }
-            ],
-            2: [
-                { name: 'Almuerzo', p: 60, f: 55, c: 65 },
-                { name: 'Cena', p: 40, f: 45, c: 35 }
-            ],
-            3: [
-                { name: 'Desayuno', p: 25, f: 30, c: 20 },
-                { name: 'Almuerzo', p: 40, f: 40, c: 45 },
-                { name: 'Cena', p: 35, f: 30, c: 35 }
-            ],
-            4: [
-                { name: 'Desayuno', p: 20, f: 20, c: 20 },
-                { name: 'Almuerzo', p: 35, f: 30, c: 40 },
-                { name: 'Cena', p: 35, f: 30, c: 30 },
-                { name: 'Merienda', p: 10, f: 20, c: 10 }
-            ],
-            5: [
-                { name: 'Desayuno', p: 20, f: 15, c: 20 },
-                { name: 'Media Mañana', p: 15, f: 10, c: 15 },
-                { name: 'Almuerzo', p: 30, f: 30, c: 35 },
-                { name: 'Merienda', p: 15, f: 20, c: 15 },
-                { name: 'Cena', p: 20, f: 25, c: 15 }
-            ],
-            6: [
-                { name: 'Desayuno', p: 15, f: 10, c: 15 },
-                { name: 'Media Mañana', p: 15, f: 10, c: 15 },
-                { name: 'Almuerzo', p: 25, f: 20, c: 25 },
-                { name: 'Merienda', p: 15, f: 20, c: 15 },
-                { name: 'Cena', p: 20, f: 30, c: 20 },
-                { name: 'Post-Cena', p: 10, f: 10, c: 10 }
-            ]
-        };
-        
-        // Contador para variar la selección de menús
-        let menuCounter = 0;
-
-        /**
-         * Formatea un nombre de alimento con mayúscula inicial y, si se desea,
-         * con un artículo adecuado.
-         */
-        const up = (str, addArticle = false, isGenitive = false) => {
-            if (!str) return '';
-            let simplified = str.replace('pechuga de ', '').replace('yogur griego natural', 'yogur griego');
-
-            let article = '';
-            const baseStr = simplified.charAt(0).toUpperCase() + simplified.slice(1);
-
-            if (addArticle) {
-                if (simplified.includes('huevo') || simplified.includes('aceite')) {
-                    article = 'el ';
-                } else if (
-                    simplified.includes('queso') ||
-                    simplified.includes('pan') ||
-                    simplified.includes('plátano') ||
-                    simplified.includes('boniato') ||
-                    simplified.includes('brócoli') ||
-                    simplified.includes('arroz') ||
-                    simplified.includes('cuscús') ||
-                    simplified.includes('seitán') ||
-                    simplified.includes('maíz') ||
-                    simplified.includes('tofu')
-                ) {
-                    article = 'el ';
-                } else if (
-                    simplified.includes('nueces') ||
-                    simplified.includes('lentejas') ||
-                    simplified.includes('gambas') ||
-                    simplified.includes('espinacas') ||
-                    simplified.includes('semillas')
-                ) {
-                    article = 'las ';
-                } else if (
-                    simplified.includes('mantequilla') ||
-                    simplified.includes('proteína') ||
-                    simplified.includes('ternera') ||
-                    simplified.includes('pasta') ||
-                    simplified.includes('quinoa') ||
-                    simplified.includes('avena') ||
-                    simplified.includes('leche')
-                ) {
-                    article = 'la ';
-                } else {
-                    article = 'el ';
-                }
-            }
-            
-            if (isGenitive) {
-                if (article.trim() === 'el' || article.trim() === 'los') {
-                    article = article.replace('el', 'del').replace('los', 'de los');
-                } else if (article.trim() === 'la' || article.trim() === 'las') {
-                    article = article.replace('la', 'de la').replace('las', 'de las');
-                } else {
-                    article = 'del ';
-                }
-            }
-
-            return article.trim().length > 0 ? (article + baseStr) : baseStr;
-        };
-        
+        // Cálculo de calorías desde macros
         const calculateCalories = () => {
             const p = parseFloat(targetProteinInput.value) || 0;
             const f = parseFloat(targetFatInput.value) || 0;
@@ -528,89 +196,69 @@
             const calories = (p * 4) + (c * 4) + (f * 9);
             totalCaloriesElement.textContent = Math.round(calories).toLocaleString('es-ES');
         };
-        
-        // Cambiar opción de menú (Opción 1 / Opción 2)
-        window.changeMealOption = function(dayIndex, mealIndex, optionNumber) {
-            document.getElementById(`recipe-${dayIndex}-${mealIndex}-1-details`).innerHTML = '';
-            document.getElementById(`recipe-${dayIndex}-${mealIndex}-2-details`).innerHTML = '';
-            
-            const btn1 = document.getElementById(`btn-recipe-${dayIndex}-${mealIndex}-1`);
-            const btn2 = document.getElementById(`btn-recipe-${dayIndex}-${mealIndex}-2`);
-            
-            btn1.textContent = 'Generar receta IA';
-            btn1.disabled = false;
-            btn1.classList.remove('bg-cyan-600', 'opacity-70');
-            btn1.classList.add('bg-gradient-turquesa');
 
-            btn2.textContent = 'Generar receta IA';
-            btn2.disabled = false;
-            btn2.classList.remove('bg-cyan-600', 'opacity-70');
-            btn2.classList.add('bg-gradient-turquesa');
+        [targetProteinInput, targetFatInput, targetCarbsInput].forEach(input => {
+            input.addEventListener('input', calculateCalories);
+        });
 
-            const container1 = document.getElementById(`option-container-${dayIndex}-${mealIndex}-1`);
-            const container2 = document.getElementById(`option-container-${dayIndex}-${mealIndex}-2`);
+        document.addEventListener('DOMContentLoaded', calculateCalories);
 
-            if (optionNumber === 1) {
-                container1.classList.remove('hidden');
-                container2.classList.add('hidden');
-            } else {
-                container1.classList.add('hidden');
-                container2.classList.remove('hidden');
-            }
+        // Utilidad para alternar visibilidad de pasos de receta
+        window.toggleRecipeDetails = function(id) {
+            const element = document.getElementById(id);
+            if (!element) return;
+            element.classList.toggle('hidden');
         };
 
-        // --- FUNCIÓN DE RECETA IA (Gemini vía Netlify) ---
-        window.generateRecipeFromAI = async function(dayIndex, mealIndex, optionNumber, buttonElement) {
-            const recipeDetailsId = buttonElement.getAttribute('data-target-id');
-            const recipeDetailsDiv = document.getElementById(recipeDetailsId);
-            
-            if (!currentPlanData) {
-                recipeDetailsDiv.innerHTML = '<p class="text-center text-red-500 font-semibold">Error: datos del plan no encontrados. Genera de nuevo el menú antes de solicitar una receta.</p>';
+        /**
+         * Llamada a Netlify + Gemini para generar un plan semanal completo.
+         * @param {boolean} useFridge Si debe usarse el texto de nevera.
+         */
+        async function generateWeeklyPlanByAI(useFridge = false) {
+            const pTarget = parseFloat(targetProteinInput.value) || 0;
+            const fTarget = parseFloat(targetFatInput.value) || 0;
+            const cTarget = parseFloat(targetCarbsInput.value) || 0;
+            const numMeals = parseInt(numMealsSelector.value, 10);
+            const numDays = parseInt(numDaysToPlanSelector.value, 10);
+            const dietaryFilter = dietaryFilterInput.value.trim();
+            const fridgeText = useFridge ? fridgeIngredientsInput.value.trim() : "";
+
+            if (pTarget <= 0 || fTarget <= 0 || cTarget <= 0) {
+                alert('Introduce macros válidos para proteína, grasas y carbohidratos.');
                 return;
             }
 
-            const meal = currentPlanData.days[dayIndex].meals[mealIndex];
-            const option = (optionNumber === 1) ? meal.option1 : meal.option2;
-            const mealName = meal.name;
-            const description = option.description;
-            const foods = option.foods;
-            const macros = meal.targetMacros;
+            // Placeholder de carga
+            menusContainer.innerHTML = `
+                <div class="text-center p-8 bg-white rounded-xl shadow-inner border border-cyan-300">
+                    <h3 class="text-xl font-semibold text-cyan-700">Calculando plan con IA...</h3>
+                    <p class="mt-2 text-gray-500 animate-pulse">Chef-Bot está diseñando ${numDays} días y ${numMeals} comidas por día ajustando tus macros, restricciones y estilo mediterráneo.</p>
+                </div>
+            `;
+            generatedMenusSection.classList.remove('hidden');
+            menusTitle.textContent = `Plan de ${numDays} días sugerido`;
 
-            buttonElement.textContent = '🤖 Generando receta con IA...';
-            buttonElement.disabled = true;
-            buttonElement.classList.add('opacity-70');
-
-            recipeDetailsDiv.classList.remove('hidden');
-            recipeDetailsDiv.innerHTML = '<p class="text-center text-cyan-700 animate-pulse font-semibold">Chef-Bot está diseñando una receta coherente con tus macros y restricciones...</p>';
-
-            // Lista de ingredientes con cantidades exactas
-            const ingredientsList = foods
-                .filter(f => f.scaledGrams > 0)
-                .map(f => ({
-                    nombre: f.name,
-                    gramos: Math.max(0, Math.round(f.scaledGrams))
-                }));
-
-            const rawDietaryFilter = dietaryFilterInput.value.trim();
-
-            const recipeRequest = {
-                comida: mealName,
-                descripcion: description,
-                ingredientes: ingredientsList,
-                macrosObjetivo: {
-                    proteina_g: Math.round(macros.p),
-                    grasa_g: Math.round(macros.f),
-                    carbohidratos_g: Math.round(macros.c)
+            const payload = {
+                dailyMacros: {
+                    protein_g: pTarget,
+                    fat_g: fTarget,
+                    carbs_g: cTarget
                 },
-                restricciones: rawDietaryFilter,
-                notas: 'No añadas ingredientes nuevos que no estén en la lista de ingredientes. Respeta estrictamente las restricciones dietéticas indicadas.'
+                numMeals,
+                numDays,
+                dietaryFilter,
+                fridgeIngredients: fridgeText,
+                style: 'mediterranea'
             };
 
             try {
                 const res = await fetch('/.netlify/functions/verifyMyth', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ recipeRequest })
+                    body: JSON.stringify({
+                        mode: 'week',
+                        payload
+                    })
                 });
 
                 if (!res.ok) {
@@ -618,408 +266,178 @@
                 }
 
                 const data = await res.json();
+                currentPlanData = data;
 
-                const title = (data.title || description || mealName || 'Receta sugerida').toString();
-                const shortDescription = (data.shortDescription || description || '').toString();
-                const prepTime = Number.isFinite(data.prepTimeMinutes) ? data.prepTimeMinutes : 10;
-                const cookTime = Number.isFinite(data.cookTimeMinutes) ? data.cookTimeMinutes : 15;
-                const difficulty = (data.difficulty || 'Fácil').toString();
-
-                const steps = Array.isArray(data.steps) && data.steps.length
-                    ? data.steps.map(s => s.toString()).filter(Boolean)
-                    : ['Prepara una combinación sencilla con los ingredientes indicados respetando las cantidades y disfruta de la comida.'];
-
-                const tips = Array.isArray(data.tips)
-                    ? data.tips.map(t => t.toString()).filter(Boolean)
-                    : [];
-
-                const warnings = Array.isArray(data.warnings)
-                    ? data.warnings.map(w => w.toString()).filter(Boolean)
-                    : [];
-
-                const ingredientsHtml = ingredientsList.map(ing =>
-                    `<li><span class="font-semibold">${ing.gramos} g</span> de ${ing.nombre}</li>`
-                ).join('');
-
-                const stepsHtml = steps.map(step => `<li>${step}</li>`).join('');
-
-                const tipsHtml = tips.length
-                    ? `
-                        <h6 class="font-bold text-base text-cyan-800 mt-3">Trucos de Chef-Bot:</h6>
-                        <ul class="list-disc list-inside text-sm text-gray-700 ml-2 mt-1 space-y-1">
-                            ${tips.map(t => `<li>${t}</li>`).join('')}
-                        </ul>
-                    `
-                    : '';
-
-                const warningsHtml = warnings.length
-                    ? `
-                        <h6 class="font-bold text-base text-red-700 mt-3">Avisos importantes:</h6>
-                        <ul class="list-disc list-inside text-sm text-red-700 ml-2 mt-1 space-y-1">
-                            ${warnings.map(w => `<li>${w}</li>`).join('')}
-                        </ul>
-                    `
-                    : '';
-
-                const recipeContent = `
-                    <h5 class="text-lg font-bold text-cyan-900 mb-2">${title}</h5>
-                    <div class="flex justify-between text-xs text-gray-500 mb-3 border-b border-cyan-200 pb-2">
-                        <span>Preparación: ${prepTime} min</span>
-                        <span>Cocción: ${cookTime} min</span>
-                        <span>Dificultad: ${difficulty}</span>
-                    </div>
-                    ${shortDescription ? `<p class="text-sm text-gray-700 mb-3">${shortDescription}</p>` : ''}
-                    <h6 class="font-bold text-base text-cyan-800">Ingredientes para esta comida:</h6>
-                    <ul class="list-disc list-inside text-sm text-gray-700 mb-4 ml-2">
-                        ${ingredientsHtml}
-                    </ul>
-                    <h6 class="font-bold text-base text-cyan-800">Elaboración paso a paso:</h6>
-                    <ol class="list-decimal list-inside text-sm text-gray-700 ml-2 mt-2 space-y-2">
-                        ${stepsHtml}
-                    </ol>
-                    ${tipsHtml}
-                    ${warningsHtml}
-                `;
-
-                recipeDetailsDiv.innerHTML = `
-                    <div class="p-4 bg-cyan-100 rounded-lg shadow-inner mt-4 border border-cyan-300">
-                        ${recipeContent}
-                    </div>
-                `;
-
-                buttonElement.textContent = 'Receta generada (ver)';
-                buttonElement.classList.add('bg-cyan-600');
+                renderPlan(data, pTarget, fTarget, cTarget);
             } catch (error) {
                 console.error(error);
-                recipeDetailsDiv.innerHTML = `
-                    <p class="text-center text-red-500 font-semibold">
-                        No se ha podido generar la receta con IA en este momento. Inténtalo de nuevo más tarde.
-                    </p>
+                menusContainer.innerHTML = `
+                    <div class="text-center p-8 bg-white rounded-xl shadow-inner border border-red-200">
+                        <h3 class="text-xl font-semibold text-red-600">No se ha podido generar el plan con IA</h3>
+                        <p class="mt-2 text-red-500">Inténtalo de nuevo en unos minutos. Si el problema persiste, revisa la configuración de la API en Netlify.</p>
+                    </div>
                 `;
-                buttonElement.textContent = 'Reintentar con IA';
-            } finally {
-                buttonElement.disabled = false;
-                buttonElement.classList.remove('opacity-70');
             }
-        };
+        }
 
         /**
-         * Genera el plan semanal (lógica local) respetando restricciones dietéticas.
-         * @param {boolean} useFridge Si debe priorizar los ingredientes de la nevera.
+         * Renderiza el plan semanal devuelto por la IA.
+         * Estructura esperada (simplificada):
+         * {
+         *   mode: "week",
+         *   plan_name: "...",
+         *   days: [
+         *     {
+         *       day_name: "Lunes",
+         *       total_macros: { protein_g, fat_g, carbs_g },
+         *       meals: [
+         *         {
+         *           meal_type: "Desayuno",
+         *           recipe_name: "...",
+         *           short_description: "...",
+         *           macros: { protein_g, fat_g, carbs_g },
+         *           ingredients: [{ name, quantity_grams, notes }],
+         *           steps: ["...", "..."]
+         *         }
+         *       ]
+         *     }
+         *   ],
+         *   shopping_list: [...],
+         *   general_tips: [...]
+         * }
          */
-        const generateWeeklyPlan = (useFridge = false) => {
-            const pTarget = parseFloat(targetProteinInput.value) || 0;
-            const fTarget = parseFloat(targetFatInput.value) || 0;
-            const cTarget = parseFloat(targetCarbsInput.value) || 0;
-            const numMeals = parseInt(numMealsSelector.value);
-            const numDays = parseInt(numDaysToPlanSelector.value);
-            const rawDietaryFilter = dietaryFilterInput.value;
-            const dietaryFilter = rawDietaryFilter.toLowerCase().trim();
-            const fridgeText = fridgeIngredientsInput.value.toLowerCase().trim();
-            
-            if (pTarget <= 0 || fTarget <= 0 || cTarget <= 0) {
-                alert('Introduce macros válidos para proteína, grasas y carbohidratos.');
+        function renderPlan(plan, pTarget, fTarget, cTarget) {
+            const days = Array.isArray(plan.days) ? plan.days : [];
+
+            if (!days.length) {
+                menusContainer.innerHTML = `
+                    <div class="text-center p-8 bg-white rounded-xl shadow-inner border border-yellow-200">
+                        <h3 class="text-xl font-semibold text-yellow-700">Plan de respaldo</h3>
+                        <p class="mt-2 text-gray-600">La IA no ha devuelto un plan estructurado completo. Se ha generado un plan mínimo de respaldo.</p>
+                    </div>
+                `;
                 return;
             }
 
-            menusContainer.innerHTML = `
-                <div class="text-center p-8 bg-white rounded-xl shadow-inner border border-cyan-300">
-                    <h3 class="text-xl font-semibold text-cyan-700">Calculando plan...</h3>
-                    <p class="mt-2 text-gray-500 animate-pulse">Chef-Bot está optimizando ${numDays} días y ${numMeals} comidas para tus objetivos.</p>
-                </div>
-            `;
-            generatedMenusSection.classList.remove('hidden');
-            menusTitle.textContent = `Plan de ${numDays} días sugerido`;
-
-            const dailyTargets = { p: pTarget, f: fTarget, c: cTarget };
-            const mealConfig = mealDistributions[numMeals];
-
-            let availableFoods = Object.keys(foodDatabase);
-            const forbiddenFoods = buildForbiddenFoodsFromFilter(rawDietaryFilter);
-            availableFoods = availableFoods.filter(food => !forbiddenFoods.has(food));
-
-            let fridgeList = [];
-            if (useFridge && fridgeText.length > 0) {
-                fridgeList = fridgeText
-                    .split(',')
-                    .map(s => s.trim())
-                    .filter(s => availableFoods.includes(s));
-            }
-            
-            const getFoodForCategory = (macro, mealName) => {
-                const categoryList = mealTypeRestrictions[mealName] && mealTypeRestrictions[mealName][macro]
-                    ? mealTypeRestrictions[mealName][macro]
-                    : [];
-
-                if (fridgeList.length > 0) {
-                    const fridgeMatches = fridgeList.filter(food =>
-                        foodDatabase[food] && categoryList.includes(foodDatabase[food].category)
-                    );
-                    if (fridgeMatches.length > 0) {
-                        return fridgeMatches[menuCounter % fridgeMatches.length];
-                    }
-                }
-
-                const regularMatches = availableFoods.filter(food =>
-                    foodDatabase[food] && categoryList.includes(foodDatabase[food].category)
-                );
-
-                if (regularMatches.length > 0) {
-                    const idx = (menuCounter + Math.floor(Math.random() * regularMatches.length)) % regularMatches.length;
-                    return regularMatches[idx];
-                }
-
-                return null;
-            };
-
-            const plan = { days: [] };
-            const daysOfWeek = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
-
-            for (let d = 0; d < numDays; d++) {
-                const dayName = daysOfWeek[d % 7];
-                const dayPlan = {
-                    day: dayName,
-                    targetCalories: Math.round((pTarget * 4) + (cTarget * 4) + (fTarget * 9)),
-                    meals: []
-                };
-
-                mealConfig.forEach((mealDistribution, m) => {
-                    const mealName = mealDistribution.name;
-                    const dayMeal = {
-                        name: mealName,
-                        targetMacros: { 
-                            p: dailyTargets.p * (mealDistribution.p / 100),
-                            f: dailyTargets.f * (mealDistribution.f / 100),
-                            c: dailyTargets.c * (mealDistribution.c / 100)
-                        },
-                        option1: {},
-                        option2: {}
-                    };
-                    
-                    for (let option = 1; option <= 2; option++) {
-                        const targetMacros = dayMeal.targetMacros;
-                        let pRemaining = targetMacros.p;
-                        let fRemaining = targetMacros.f;
-                        let cRemaining = targetMacros.c;
-                        
-                        const mainProtein = getFoodForCategory('protein', mealName);
-                        const mainCarb = getFoodForCategory('carb', mealName);
-                        const mainFat = getFoodForCategory('fat', mealName);
-                        const miscVeggie = getFoodForCategory('misc', mealName);
-                        
-                        menuCounter++;
-                        
-                        let selectedFoods = [];
-
-                        if (mainProtein) {
-                            const foodData = foodDatabase[mainProtein];
-                            if (foodData && foodData.protein > 0) {
-                                let gramsNeeded = (targetMacros.p * 0.8) / (foodData.protein / 100);
-                                gramsNeeded = Math.min(gramsNeeded, 500);
-                                
-                                pRemaining -= gramsNeeded * (foodData.protein / 100);
-                                fRemaining -= gramsNeeded * (foodData.fat / 100);
-                                cRemaining -= gramsNeeded * (foodData.carbs / 100);
-                                
-                                selectedFoods.push({ name: mainProtein, grams: gramsNeeded, macros: foodData });
-                            } else {
-                                console.warn(`Proteína principal no disponible o sin datos válidos: ${mainProtein}`);
-                            }
-                        } else {
-                            console.warn(`No se ha encontrado proteína para la comida ${mealName} con las restricciones actuales.`);
-                        }
-                        
-                        if (mainCarb && cRemaining > 0) {
-                            const foodData = foodDatabase[mainCarb];
-                            if (foodData && foodData.carbs > 0) {
-                                let gramsNeeded = (cRemaining * 0.8) / (foodData.carbs / 100);
-                                gramsNeeded = Math.min(gramsNeeded, 500);
-                                
-                                pRemaining -= gramsNeeded * (foodData.protein / 100);
-                                fRemaining -= gramsNeeded * (foodData.fat / 100);
-                                cRemaining -= gramsNeeded * (foodData.carbs / 100);
-                                
-                                selectedFoods.push({ name: mainCarb, grams: gramsNeeded, macros: foodData });
-                            } else {
-                                console.warn(`Carbohidrato principal no disponible o sin datos válidos: ${mainCarb}`);
-                            }
-                        } else if (mainCarb) {
-                            console.warn(`No se ha podido usar el carbohidrato principal en la comida ${mealName}.`);
-                        }
-                        
-                        if (mainFat && fRemaining > 0) {
-                            const foodData = foodDatabase[mainFat];
-                            if (foodData && foodData.fat > 0) {
-                                let gramsNeeded = (fRemaining * 0.7) / (foodData.fat / 100);
-                                gramsNeeded = Math.min(gramsNeeded, 100);
-                                
-                                pRemaining -= gramsNeeded * (foodData.protein / 100);
-                                fRemaining -= gramsNeeded * (foodData.fat / 100);
-                                cRemaining -= gramsNeeded * (foodData.carbs / 100);
-                                
-                                selectedFoods.push({ name: mainFat, grams: gramsNeeded, macros: foodData });
-                            } else {
-                                console.warn(`Grasa principal no disponible o sin datos válidos: ${mainFat}`);
-                            }
-                        } else if (mainFat) {
-                            console.warn(`No se ha podido usar la fuente principal de grasa en la comida ${mealName}.`);
-                        }
-                        
-                        if (miscVeggie && cRemaining > 0) {
-                            const foodData = foodDatabase[miscVeggie];
-                            if (foodData && foodData.carbs > 0) {
-                                let gramsNeeded = Math.min(500, (cRemaining * 2) / (foodData.carbs / 100));
-                                
-                                pRemaining -= gramsNeeded * (foodData.protein / 100);
-                                fRemaining -= gramsNeeded * (foodData.fat / 100);
-                                cRemaining -= gramsNeeded * (foodData.carbs / 100);
-                                
-                                selectedFoods.push({ name: miscVeggie, grams: gramsNeeded, macros: foodData });
-                            } else {
-                                console.warn(`Vegetal/misceláneo no disponible o sin datos válidos: ${miscVeggie}`);
-                            }
-                        } else if (miscVeggie) {
-                            console.warn(`No se ha podido usar el vegetal/misceláneo en la comida ${mealName}.`);
-                        }
-
-                        const finalFoods = selectedFoods.map(f => {
-                            let scaledGrams = f.grams + (Math.random() * (f.grams * 0.1) * (Math.random() > 0.5 ? 1 : -1));
-                            scaledGrams = Math.max(0, scaledGrams);
-                            return {
-                                name: f.name,
-                                scaledGrams: scaledGrams,
-                                p: scaledGrams * (f.macros.protein / 100),
-                                f: scaledGrams * (f.macros.fat / 100),
-                                c: scaledGrams * (f.macros.carbs / 100)
-                            };
-                        });
-                        
-                        const totalP = finalFoods.reduce((sum, f) => sum + f.p, 0);
-                        const totalF = finalFoods.reduce((sum, f) => sum + f.f, 0);
-                        const totalC = finalFoods.reduce((sum, f) => sum + f.c, 0);
-                        
-                        let description;
-                        if (mainProtein && mainCarb) {
-                            description = `${up(mainProtein)} con ${up(mainCarb, true, true)}`;
-                            if (miscVeggie && miscVeggie !== 'aceite de oliva') {
-                                description += ` y ${up(miscVeggie, true, true)}`;
-                            }
-                        } else if (mainProtein) {
-                            description = `${up(mainProtein)} y ${up(mainFat, true, true)} como propuesta sencilla`;
-                        } else {
-                            description = `Combinación de ${up(mainCarb, true)} y ${up(mainFat, true)}`;
-                        }
-
-                        if (option === 1) {
-                            dayMeal.option1 = {
-                                description: `${mealName}: ${description}`,
-                                totalMacros: { p: totalP, f: totalF, c: totalC },
-                                foods: finalFoods
-                            };
-                        } else {
-                            const altProtein = getFoodForCategory('protein', mealName) || mainProtein;
-                            const altCarb = getFoodForCategory('carb', mealName) || mainCarb;
-
-                            const altDesc = description
-                                .replace(up(mainProtein || ''), up(altProtein || mainProtein || ''))
-                                .replace(up(mainCarb || ''), up(altCarb || mainCarb || ''));
-
-                            dayMeal.option2 = {
-                                description: `Alternativa: ${altDesc}`,
-                                totalMacros: { p: totalP * 1.05, f: totalF * 0.95, c: totalC },
-                                foods: finalFoods.map(f => ({ ...f, scaledGrams: f.scaledGrams * 1.05 }))
-                            };
-                        }
-                    }
-
-                    dayPlan.meals.push(dayMeal);
-                });
-
-                plan.days.push(dayPlan);
-            }
-
-            currentPlanData = plan;
-
-            setTimeout(() => {
-                renderPlan(plan);
-            }, 1000);
-        };
-
-        /**
-         * Renderiza el plan semanal en la interfaz.
-         */
-        const renderPlan = (plan) => {
             let html = '';
-            
-            plan.days.forEach((day, dayIndex) => {
+
+            days.forEach((day, dayIndex) => {
+                const meals = Array.isArray(day.meals) ? day.meals : [];
+                const dayName = day.day_name || `Día ${dayIndex + 1}`;
+                const tMacros = day.total_macros || {};
+                const tP = Number.isFinite(tMacros.protein_g) ? tMacros.protein_g : pTarget;
+                const tF = Number.isFinite(tMacros.fat_g) ? tMacros.fat_g : fTarget;
+                const tC = Number.isFinite(tMacros.carbs_g) ? tMacros.carbs_g : cTarget;
+
                 html += `
                     <div class="menu-item bg-white p-6 rounded-xl shadow-lg border border-gray-200">
-                        <h3 class="text-3xl font-extrabold text-cyan-800 border-b-4 border-cyan-400 pb-2 mb-4">${day.day}</h3>
-                        <p class="text-sm text-gray-500 mb-4">Objetivo diario: P: ${targetProteinInput.value} g | G: ${targetFatInput.value} g | C: ${targetCarbsInput.value} g</p>
+                        <h3 class="text-3xl font-extrabold text-cyan-800 border-b-4 border-cyan-400 pb-2 mb-4">${dayName}</h3>
+                        <p class="text-sm text-gray-500 mb-4">
+                            Objetivo diario aproximado: 
+                            P: ${Math.round(tP)} g | 
+                            G: ${Math.round(tF)} g | 
+                            C: ${Math.round(tC)} g
+                        </p>
                         
                         <div class="space-y-4">
-                        ${day.meals.map((meal, mealIndex) => {
-                            const mealIdBase = `${dayIndex}-${mealIndex}`;
+                `;
 
-                            return `
-                                <div class="p-4 rounded-lg bg-gray-50 border border-gray-200">
-                                    <h4 class="text-xl font-semibold text-gray-700">${meal.name}
-                                        <span class="text-sm font-normal text-cyan-600 ml-2">(P: ${meal.targetMacros.p.toFixed(0)} g | G: ${meal.targetMacros.f.toFixed(0)} g | C: ${meal.targetMacros.c.toFixed(0)} g)</span>
-                                    </h4>
+                meals.forEach((meal, mealIndex) => {
+                    const mealIdBase = `${dayIndex}-${mealIndex}`;
+                    const mealType = meal.meal_type || 'Comida';
+                    const recipeName = meal.recipe_name || 'Plato sugerido por Chef-Bot';
+                    const shortDesc = meal.short_description || '';
+                    const macros = meal.macros || {};
+                    const mP = Number.isFinite(macros.protein_g) ? macros.protein_g : 0;
+                    const mF = Number.isFinite(macros.fat_g) ? macros.fat_g : 0;
+                    const mC = Number.isFinite(macros.carbs_g) ? macros.carbs_g : 0;
+                    const ingredients = Array.isArray(meal.ingredients) ? meal.ingredients : [];
+                    const steps = Array.isArray(meal.steps) ? meal.steps : [];
 
-                                    <div class="option-selector flex space-x-4 mt-3 mb-4">
-                                        <input type="radio" id="opt-${mealIdBase}-1" name="meal-option-${mealIdBase}" value="1" checked class="hidden" onchange="changeMealOption(${dayIndex}, ${mealIndex}, 1)">
-                                        <label for="opt-${mealIdBase}-1" class="px-3 py-1 text-sm font-medium border border-gray-300 rounded-full cursor-pointer transition duration-200 hover:bg-cyan-100">
-                                            Opción 1
-                                        </label>
+                    const ingredientsHtml = ingredients.length
+                        ? ingredients.map(ing => {
+                            const grams = Number.isFinite(ing.quantity_grams) ? `${Math.round(ing.quantity_grams)} g` : '';
+                            const notes = ing.notes ? ` (${ing.notes})` : '';
+                            return `<li><span class="font-semibold">${grams}</span> ${ing.name}${notes}</li>`;
+                        }).join('')
+                        : '<li>Ingredientes no especificados en detalle.</li>';
 
-                                        <input type="radio" id="opt-${mealIdBase}-2" name="meal-option-${mealIdBase}" value="2" class="hidden" onchange="changeMealOption(${dayIndex}, ${mealIndex}, 2)">
-                                        <label for="opt-${mealIdBase}-2" class="px-3 py-1 text-sm font-medium border border-gray-300 rounded-full cursor-pointer transition duration-200 hover:bg-cyan-100">
-                                            Opción 2
-                                        </label>
-                                    </div>
-                                    
-                                    <div id="option-container-${mealIdBase}-1">
-                                        <p class="text-gray-600 font-medium">${meal.option1.description}</p>
-                                        <p class="text-xs text-green-600 mt-1">
-                                            Macros estimados: P: ${meal.option1.totalMacros.p.toFixed(1)} g | G: ${meal.option1.totalMacros.f.toFixed(1)} g | C: ${meal.option1.totalMacros.c.toFixed(1)} g
-                                        </p>
-                                        <button id="btn-recipe-${mealIdBase}-1" data-target-id="recipe-${mealIdBase}-1-details" onclick="generateRecipeFromAI(${dayIndex}, ${mealIndex}, 1, this)" class="mt-3 text-xs px-3 py-1 rounded-lg text-white bg-gradient-turquesa hover:opacity-90 transition">Generar receta IA</button>
-                                        <div id="recipe-${mealIdBase}-1-details"></div>
-                                    </div>
+                    const stepsHtml = steps.length
+                        ? steps.map(step => `<li>${step}</li>`).join('')
+                        : '<li>La IA no ha detallado los pasos de elaboración para este plato.</li>';
 
-                                    <div id="option-container-${mealIdBase}-2" class="hidden">
-                                        <p class="text-gray-600 font-medium">${meal.option2.description}</p>
-                                        <p class="text-xs text-green-600 mt-1">
-                                            Macros estimados: P: ${meal.option2.totalMacros.p.toFixed(1)} g | G: ${meal.option2.totalMacros.f.toFixed(1)} g | C: ${meal.option2.totalMacros.c.toFixed(1)} g
-                                        </p>
-                                        <button id="btn-recipe-${mealIdBase}-2" data-target-id="recipe-${mealIdBase}-2-details" onclick="generateRecipeFromAI(${dayIndex}, ${mealIndex}, 2, this)" class="mt-3 text-xs px-3 py-1 rounded-lg text-white bg-gradient-turquesa hover:opacity-90 transition">Generar receta IA</button>
-                                        <div id="recipe-${mealIdBase}-2-details"></div>
-                                    </div>
-                                </div>
-                            `;
-                        }).join('')}
+                    html += `
+                        <div class="p-4 rounded-lg bg-gray-50 border border-gray-200">
+                            <h4 class="text-xl font-semibold text-gray-700">${mealType}: ${recipeName}</h4>
+                            <p class="text-xs text-green-600 mt-1">
+                                Macros aproximados: P: ${mP.toFixed(1)} g | G: ${mF.toFixed(1)} g | C: ${mC.toFixed(1)} g
+                            </p>
+                            ${shortDesc ? `<p class="text-sm text-gray-600 mt-2">${shortDesc}</p>` : ''}
+
+                            <h5 class="mt-3 text-sm font-semibold text-cyan-800">Ingredientes:</h5>
+                            <ul class="list-disc list-inside text-sm text-gray-700 ml-2 mt-1">
+                                ${ingredientsHtml}
+                            </ul>
+
+                            <button 
+                                type="button"
+                                class="mt-3 text-xs px-3 py-1 rounded-lg text-white bg-gradient-turquesa hover:opacity-90 transition"
+                                onclick="toggleRecipeDetails('recipe-steps-${mealIdBase}')"
+                            >
+                                Ver elaboración paso a paso
+                            </button>
+
+                            <div id="recipe-steps-${mealIdBase}" class="hidden mt-3">
+                                <h5 class="text-sm font-semibold text-cyan-800">Elaboración paso a paso:</h5>
+                                <ol class="list-decimal list-inside text-sm text-gray-700 ml-2 mt-1 space-y-2">
+                                    ${stepsHtml}
+                                </ol>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                html += `
                         </div>
                     </div>
                 `;
             });
-            
-            menusContainer.innerHTML = html;
-        };
 
-        // --- Event Listeners ---
-        [targetProteinInput, targetFatInput, targetCarbsInput].forEach(input => {
-            input.addEventListener('input', calculateCalories);
-        });
-        
-        document.addEventListener('DOMContentLoaded', calculateCalories);
-        
+            // Lista de la compra + tips (si existen)
+            const shoppingList = Array.isArray(plan.shopping_list) ? plan.shopping_list : [];
+            const tips = Array.isArray(plan.general_tips) ? plan.general_tips : [];
+
+            if (shoppingList.length || tips.length) {
+                html += `
+                    <div class="menu-item bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+                        <h3 class="text-2xl font-bold text-cyan-800 mb-4">Resumen general</h3>
+                        ${shoppingList.length ? `
+                            <h4 class="text-lg font-semibold text-gray-700 mb-2">Lista de la compra sugerida:</h4>
+                            <ul class="list-disc list-inside text-sm text-gray-700 mb-4 ml-2">
+                                ${shoppingList.map(item => `<li>${item}</li>`).join('')}
+                            </ul>
+                        ` : ''}
+
+                        ${tips.length ? `
+                            <h4 class="text-lg font-semibold text-gray-700 mb-2">Consejos de Chef-Bot:</h4>
+                            <ul class="list-disc list-inside text-sm text-gray-700 ml-2">
+                                ${tips.map(t => `<li>${t}</li>`).join('')}
+                            </ul>
+                        ` : ''}
+                    </div>
+                `;
+            }
+
+            menusContainer.innerHTML = html;
+        }
+
+        // Listeners de botones principales
         generateMenusBtn.addEventListener('click', () => {
-            generateWeeklyPlan(false);
+            generateWeeklyPlanByAI(false);
         });
-        
+
         generateFridgeBtn.addEventListener('click', () => {
-            generateWeeklyPlan(true);
+            generateWeeklyPlanByAI(true);
         });
     </script>
 </body>
