@@ -212,6 +212,9 @@
 
         /**
          * Llamada a Netlify + Gemini para generar un plan semanal completo.
+         * Lee el "sobre" tipo Gemini:
+         *   { candidates[0].content.parts[0].text = "<PLAN_JSON>" }
+         * y luego hace JSON.parse de ese PLAN_JSON.
          * @param {boolean} useFridge Si debe usarse el texto de nevera.
          */
         async function generateWeeklyPlanByAI(useFridge = false) {
@@ -232,7 +235,10 @@
             menusContainer.innerHTML = `
                 <div class="text-center p-8 bg-white rounded-xl shadow-inner border border-cyan-300">
                     <h3 class="text-xl font-semibold text-cyan-700">Calculando plan con IA...</h3>
-                    <p class="mt-2 text-gray-500 animate-pulse">Chef-Bot está diseñando ${numDays} días y ${numMeals} comidas por día ajustando tus macros, restricciones y estilo mediterráneo.</p>
+                    <p class="mt-2 text-gray-500 animate-pulse">
+                        Chef-Bot está diseñando ${numDays} días y ${numMeals} comidas por día ajustando tus macros,
+                        restricciones y estilo mediterráneo.
+                    </p>
                 </div>
             `;
             generatedMenusSection.classList.remove('hidden');
@@ -262,19 +268,47 @@
                 });
 
                 if (!res.ok) {
+                    // Si Netlify responde 5xx de verdad a nivel HTTP, mostramos bloque rojo
                     throw new Error(`Error en el servidor (${res.status}).`);
                 }
 
-                const data = await res.json();
-                currentPlanData = data;
+                // El backend devuelve algo tipo:
+                // {
+                //   candidates: [
+                //     { content: { parts: [ { text: "<PLAN_JSON>" } ] } }
+                //   ]
+                // }
+                const outer = await res.json();
+                const text = outer?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
 
-                renderPlan(data, pTarget, fTarget, cTarget);
+                let plan;
+                try {
+                    plan = JSON.parse(text);
+                } catch (e) {
+                    console.error('No se ha podido parsear el JSON del plan:', e, text);
+                    // Fallback defensivo
+                    plan = {
+                        mode: 'week',
+                        plan_name: 'Plan de respaldo - Formato no válido',
+                        days: [],
+                        shopping_list: [],
+                        general_tips: [
+                            'Chef-Bot ha recibido una respuesta en un formato inesperado.',
+                            'Prueba a generar el plan de nuevo en unos minutos.'
+                        ]
+                    };
+                }
+
+                currentPlanData = plan;
+                renderPlan(plan, pTarget, fTarget, cTarget);
             } catch (error) {
                 console.error(error);
                 menusContainer.innerHTML = `
                     <div class="text-center p-8 bg-white rounded-xl shadow-inner border border-red-200">
                         <h3 class="text-xl font-semibold text-red-600">No se ha podido generar el plan con IA</h3>
-                        <p class="mt-2 text-red-500">Inténtalo de nuevo en unos minutos. Si el problema persiste, revisa la configuración de la API en Netlify.</p>
+                        <p class="mt-2 text-red-500">
+                            Inténtalo de nuevo en unos minutos. Si el problema persiste, revisa la configuración de la API en Netlify.
+                        </p>
                     </div>
                 `;
             }
@@ -313,7 +347,9 @@
                 menusContainer.innerHTML = `
                     <div class="text-center p-8 bg-white rounded-xl shadow-inner border border-yellow-200">
                         <h3 class="text-xl font-semibold text-yellow-700">Plan de respaldo</h3>
-                        <p class="mt-2 text-gray-600">La IA no ha devuelto un plan estructurado completo. Se ha generado un plan mínimo de respaldo.</p>
+                        <p class="mt-2 text-gray-600">
+                            La IA no ha devuelto un plan estructurado completo. Se ha generado un plan mínimo de respaldo.
+                        </p>
                     </div>
                 `;
                 return;
