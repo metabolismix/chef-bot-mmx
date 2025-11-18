@@ -6,7 +6,7 @@ exports.handler = async function (event, context) {
     'Access-Control-Allow-Methods': 'POST, OPTIONS'
   };
 
-  // ----- CORS / MÉTODO -----
+  // ---------- CORS / MÉTODO ----------
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: cors, body: '' };
   }
@@ -18,7 +18,7 @@ exports.handler = async function (event, context) {
     };
   }
 
-  // ---------- Utilidades comunes ----------
+  // ---------- API KEY ----------
   const GEMINI_API_KEY = process.env.GOOGLE_API_KEY;
   if (!GEMINI_API_KEY) {
     return {
@@ -34,7 +34,9 @@ exports.handler = async function (event, context) {
   const GEMINI_URL =
     `https://generativelanguage.googleapis.com/v1/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
-  // Envoltorio tipo Gemini → mantiene el mismo "shape" que espera el front
+  // ---------- UTILIDADES ----------
+
+  // Envoltorio para devolver una "card" en el formato que espera el front
   function makeCardResponse(cardJsonObj) {
     const text = JSON.stringify(cardJsonObj);
     const payload = {
@@ -53,7 +55,7 @@ exports.handler = async function (event, context) {
     };
   }
 
-  // Fallback mínimo para receta / semana si algo sale mal
+  // Plan de respaldo para cuando la IA falle
   function buildFallbackCard(mode, extraWarning) {
     const baseWarning = extraWarning
       ? [extraWarning]
@@ -72,7 +74,7 @@ exports.handler = async function (event, context) {
       };
     }
 
-    // modo "recipe" (por si lo usas más adelante)
+    // Por si en el futuro usas modo "recipe"
     return {
       mode: 'recipe',
       recipe_name: 'Receta de respaldo',
@@ -99,121 +101,22 @@ exports.handler = async function (event, context) {
     };
   }
 
-  // ---------- Esquemas de respuesta ----------
+  // ---------- PROMPTS ----------
 
-  // Esquema para RECETA individual
-  const recipeSchema = {
-    type: 'object',
-    properties: {
-      mode: { type: 'string' },
-      recipe_name: { type: 'string' },
-      prep_minutes: { type: 'integer', nullable: true },
-      cook_minutes: { type: 'integer', nullable: true },
-      difficulty: { type: 'string', nullable: true },
-      servings: { type: 'integer', nullable: true },
-      meal_type: { type: 'string', nullable: true },
-      ingredients: {
-        type: 'array',
-        items: { type: 'string' }
-      },
-      steps: {
-        type: 'array',
-        items: { type: 'string' }
-      },
-      meal_summary: { type: 'string', nullable: true },
-      macro_estimate: {
-        type: 'object',
-        properties: {
-          calories: { type: 'number', nullable: true },
-          protein_g: { type: 'number', nullable: true },
-          carbs_g: { type: 'number', nullable: true },
-          fat_g: { type: 'number', nullable: true }
-        }
-      },
-      warnings: {
-        type: 'array',
-        items: { type: 'string' }
-      }
-    },
-    required: ['mode', 'recipe_name', 'ingredients', 'steps']
-  };
+  function buildWeekPrompt(payload) {
+    const {
+      dailyTargets,
+      restrictions,
+      fridgeIngredients,
+      style
+    } = payload || {};
 
-  // Esquema para PLAN SEMANAL
-  const weekSchema = {
-    type: 'object',
-    properties: {
-      mode: { type: 'string' },
-      plan_name: { type: 'string' },
-      days: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            day: { type: 'string' }, // "Lunes", "Martes", etc.
-            meals: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  meal_type: { type: 'string' }, // desayuno, comida, cena, snack
-                  recipe_name: { type: 'string' },
-                  ingredients: {
-                    type: 'array',
-                    items: { type: 'string' },
-                    nullable: true
-                  },
-                  steps: {
-                    type: 'array',
-                    items: { type: 'string' },
-                    nullable: true
-                  },
-                  macro_estimate: {
-                    type: 'object',
-                    properties: {
-                      calories: { type: 'number', nullable: true },
-                      protein_g: { type: 'number', nullable: true },
-                      carbs_g: { type: 'number', nullable: true },
-                      fat_g: { type: 'number', nullable: true }
-                    },
-                    nullable: true
-                  }
-                },
-                required: ['meal_type', 'recipe_name']
-              }
-            }
-          },
-          required: ['day', 'meals']
-        }
-      },
-      shopping_list: {
-        type: 'array',
-        items: { type: 'string' }
-      },
-      general_tips: {
-        type: 'array',
-        items: { type: 'string' }
-      }
-    },
-    required: ['mode', 'plan_name', 'days']
-  };
+    const { calories, protein_g, carbs_g, fat_g } = dailyTargets || {};
 
-  // ---------- Construcción del prompt ----------
-
-  function buildPrompt(mode, payload) {
-    if (mode === 'week') {
-      const {
-        dailyTargets,
-        restrictions,
-        fridgeIngredients,
-        style
-      } = payload || {};
-
-      const { calories, protein_g, carbs_g, fat_g } = dailyTargets || {};
-
-      return `
+    return `
 Eres Chef-Bot, un planificador de menús semanal para dieta mediterránea.
 
-Objetivo:
+OBJETIVO
 - Generar un PLAN SEMANAL completo (7 días) con desayunos, comidas, cenas y 1–2 snacks diarios.
 - Ajustar lo máximo posible los macros diarios a:
   - Calorías: ${calories ?? 'N/A'}
@@ -230,14 +133,15 @@ ${fridgeIngredients && fridgeIngredients.length ? '- ' + fridgeIngredients.join(
 Estilo de cocina preferido:
 ${style || 'Mediterránea sencilla, realista y repetible en un piso estándar.'}
 
-IMPORTANTE:
+INSTRUCCIONES IMPORTANTES
 - Recetas realistas, nada de combinaciones absurdas (evita cosas como “atún con plátano y espinacas” para desayunar).
 - Usa nombres de recetas normales de cocina casera mediterránea.
-- No inventes alimentos imposibles o marcas concretas.
+- Nada de marcas comerciales concretas.
 - Mantén una estructura clara: cada día con sus comidas, cada comida con su tipo y un nombre de receta descriptivo.
-- Ajusta los macros diarios lo mejor posible, pero sin obsesionarte: que prime el sentido común culinario.
+- Ajusta los macros diarios lo mejor posible, pero que prime el sentido común culinario.
+- NO añadas texto explicativo fuera del JSON. No uses comentarios, ni frases antes o después.
 
-Devuelve ÚNICAMENTE un JSON válido que cumpla EXACTAMENTE este esquema:
+DEVUELVE EXCLUSIVAMENTE un JSON válido con este formato EXACTO (sin texto adicional):
 
 {
   "mode": "week",
@@ -265,9 +169,9 @@ Devuelve ÚNICAMENTE un JSON válido que cumpla EXACTAMENTE este esquema:
   "general_tips": ["1–5 consejos generales prácticos"]
 }
 `.trim();
-    }
+  }
 
-    // Prompt de receta individual (por si lo reutilizas)
+  function buildRecipePrompt(payload) {
     const { claim, context } = payload || {};
     return `
 Eres Chef-Bot, un generador de recetas mediterráneas sencillas y realistas.
@@ -282,7 +186,7 @@ Genera UNA sola receta coherente, en castellano, con:
 - Pasos en lista.
 - Estimación aproximada de macros.
 
-Devuelve ÚNICAMENTE un JSON válido con este esquema:
+DEVUELVE EXCLUSIVAMENTE un JSON válido con este formato EXACTO (sin texto adicional):
 
 {
   "mode": "recipe",
@@ -312,12 +216,13 @@ ${claim || 'No especificada.'}
 `.trim();
   }
 
-  // ---------- Llamada a Gemini con response_schema adecuado ----------
+  // ---------- LLAMADA A GEMINI (SIN response_schema) ----------
 
   async function callGemini(mode, payload) {
-    const prompt = buildPrompt(mode, payload);
-
-    const responseSchema = mode === 'week' ? weekSchema : recipeSchema;
+    const prompt =
+      mode === 'week'
+        ? buildWeekPrompt(payload)
+        : buildRecipePrompt(payload);
 
     const body = {
       contents: [
@@ -330,9 +235,8 @@ ${claim || 'No especificada.'}
         temperature: 0.45,
         top_p: 0.9,
         top_k: 32,
-        max_output_tokens: 4096,
-        response_mime_type: 'application/json',
-        response_schema: responseSchema
+        max_output_tokens: 4096
+        // IMPORTANTE: sin response_mime_type ni response_schema
       }
     };
 
@@ -353,8 +257,18 @@ ${claim || 'No especificada.'}
       throw new Error(`Gemini ${res.status}: ${msg}`);
     }
 
-    const text =
-      json?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    let text =
+      json?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+
+    text = text.trim();
+
+    // A veces el modelo envuelve en ```json ... ```
+    if (text.startsWith('```')) {
+      text = text
+        .replace(/^```[a-zA-Z]*\s*/m, '')
+        .replace(/```$/m, '')
+        .trim();
+    }
 
     if (!text) {
       throw new Error('Respuesta vacía de la IA.');
@@ -383,7 +297,8 @@ ${claim || 'No especificada.'}
     return parsed;
   }
 
-  // ---------- Handler principal ----------
+  // ---------- HANDLER PRINCIPAL ----------
+
   try {
     const body = JSON.parse(event.body || '{}');
     const mode = body.mode === 'week' ? 'week' : 'recipe';
