@@ -1,4 +1,5 @@
 // netlify/functions/verifyMyth.js
+
 exports.handler = async function (event, context) {
   const cors = {
     'Access-Control-Allow-Origin': '*',
@@ -18,6 +19,744 @@ exports.handler = async function (event, context) {
     };
   }
 
+  // ======================================================
+  //   MMX_FOOD_DB: REPOSITORIO DE ALIMENTOS POR 100 g
+  //   (valores aproximados, orientativos, no clínicos)
+  // ======================================================
+
+  const MMX_FOOD_DB = {
+    // ===== LÁCTEOS / PROTEÍNAS LÁCTEAS =====
+    yogur_natural_0: {
+      label: 'Yogur natural 0% (sin azúcar)',
+      protein: 4,
+      fat: 0,
+      carbs: 4,
+      cooked: false
+    },
+    yogur_entero: {
+      label: 'Yogur natural entero',
+      protein: 4,
+      fat: 3,
+      carbs: 5,
+      cooked: false
+    },
+    yogur_skyr_natural: {
+      label: 'Yogur tipo skyr natural',
+      protein: 10,
+      fat: 0,
+      carbs: 4,
+      cooked: false
+    },
+    queso_fresco_batido_0: {
+      label: 'Queso fresco batido 0%',
+      protein: 8,
+      fat: 0,
+      carbs: 4,
+      cooked: false
+    },
+    queso_fresco_burgos: {
+      label: 'Queso fresco tipo Burgos',
+      protein: 14,
+      fat: 10,
+      carbs: 3,
+      cooked: false
+    },
+    queso_manchego_curado: {
+      label: 'Queso manchego curado',
+      protein: 25,
+      fat: 33,
+      carbs: 1,
+      cooked: false
+    },
+    queso_semicurado: {
+      label: 'Queso semicurado',
+      protein: 24,
+      fat: 28,
+      carbs: 1,
+      cooked: false
+    },
+    leche_entera: {
+      label: 'Leche entera',
+      protein: 3,
+      fat: 4,
+      carbs: 5,
+      cooked: false
+    },
+    leche_semidesnatada: {
+      label: 'Leche semidesnatada',
+      protein: 3,
+      fat: 2,
+      carbs: 5,
+      cooked: false
+    },
+    leche_desnatada: {
+      label: 'Leche desnatada',
+      protein: 3,
+      fat: 0,
+      carbs: 5,
+      cooked: false
+    },
+
+    // ===== CEREALES Y DERIVADOS =====
+    copos_avena: {
+      label: 'Copos de avena',
+      protein: 13,
+      fat: 7,
+      carbs: 60,
+      cooked: false
+    },
+    pan_blanco: {
+      label: 'Pan blanco',
+      protein: 9,
+      fat: 3,
+      carbs: 52,
+      cooked: false
+    },
+    pan_integral: {
+      label: 'Pan integral',
+      protein: 9,
+      fat: 4,
+      carbs: 45,
+      cooked: false
+    },
+    pan_centeno: {
+      label: 'Pan de centeno',
+      protein: 8,
+      fat: 2,
+      carbs: 48,
+      cooked: false
+    },
+    arroz_blanco_crudo: {
+      label: 'Arroz blanco (crudo)',
+      protein: 7,
+      fat: 1,
+      carbs: 78,
+      cooked: false
+    },
+    arroz_blanco_cocido: {
+      label: 'Arroz blanco cocido',
+      protein: 2,
+      fat: 0,
+      carbs: 28,
+      cooked: true
+    },
+    arroz_integral_cocido: {
+      label: 'Arroz integral cocido',
+      protein: 3,
+      fat: 1,
+      carbs: 23,
+      cooked: true
+    },
+    pasta_blanca_cocida: {
+      label: 'Pasta blanca cocida',
+      protein: 5,
+      fat: 1,
+      carbs: 30,
+      cooked: true
+    },
+    pasta_integral_cocida: {
+      label: 'Pasta integral cocida',
+      protein: 5,
+      fat: 2,
+      carbs: 30,
+      cooked: true
+    },
+    cuscus_cocido: {
+      label: 'Cuscús cocido',
+      protein: 3,
+      fat: 0,
+      carbs: 23,
+      cooked: true
+    },
+    quinoa_cocida: {
+      label: 'Quinoa cocida',
+      protein: 4,
+      fat: 2,
+      carbs: 21,
+      cooked: true
+    },
+    galletas_maria: {
+      label: 'Galletas tipo María',
+      protein: 7,
+      fat: 12,
+      carbs: 70,
+      cooked: true
+    },
+
+    // ===== LEGUMBRES =====
+    garbanzos_cocidos: {
+      label: 'Garbanzos cocidos (escurridos)',
+      protein: 8,
+      fat: 2,
+      carbs: 20,
+      cooked: true
+    },
+    lentejas_cocidas: {
+      label: 'Lentejas cocidas (escurridas)',
+      protein: 8,
+      fat: 1,
+      carbs: 18,
+      cooked: true
+    },
+    judias_blancas_cocidas: {
+      label: 'Judías blancas cocidas (escurridas)',
+      protein: 7,
+      fat: 1,
+      carbs: 14,
+      cooked: true
+    },
+    judias_verdes_cocidas: {
+      label: 'Judías verdes cocidas',
+      protein: 2,
+      fat: 0,
+      carbs: 4,
+      cooked: true
+    },
+    alubias_rojas_cocidas: {
+      label: 'Alubias rojas cocidas',
+      protein: 8,
+      fat: 1,
+      carbs: 18,
+      cooked: true
+    },
+    hummus: {
+      label: 'Hummus',
+      protein: 7,
+      fat: 15,
+      carbs: 10,
+      cooked: true
+    },
+
+    // ===== CARNE / PESCADO / HUEVO / VEGETALES PROTEICOS =====
+    pechuga_pollo: {
+      label: 'Pechuga de pollo (sin piel, cruda)',
+      protein: 22,
+      fat: 2,
+      carbs: 0,
+      cooked: false
+    },
+    muslo_pollo: {
+      label: 'Muslo de pollo (sin piel, crudo)',
+      protein: 19,
+      fat: 6,
+      carbs: 0,
+      cooked: false
+    },
+    pavo_magra: {
+      label: 'Pavo magro (crudo)',
+      protein: 22,
+      fat: 2,
+      carbs: 0,
+      cooked: false
+    },
+    ternera_magra: {
+      label: 'Ternera magra (cruda)',
+      protein: 21,
+      fat: 5,
+      carbs: 0,
+      cooked: false
+    },
+    cerdo_magra: {
+      label: 'Carne de cerdo magra',
+      protein: 21,
+      fat: 8,
+      carbs: 0,
+      cooked: false
+    },
+    jamon_serrano: {
+      label: 'Jamón serrano',
+      protein: 30,
+      fat: 15,
+      carbs: 0,
+      cooked: false
+    },
+    jamon_cocido: {
+      label: 'Jamón cocido',
+      protein: 18,
+      fat: 7,
+      carbs: 2,
+      cooked: false
+    },
+    chorizo: {
+      label: 'Chorizo',
+      protein: 24,
+      fat: 35,
+      carbs: 2,
+      cooked: false
+    },
+    lomo_embuchado: {
+      label: 'Lomo embuchado',
+      protein: 30,
+      fat: 15,
+      carbs: 1,
+      cooked: false
+    },
+    albondigas_magra_cocinadas: {
+      label: 'Albóndigas de carne magra (cocinadas)',
+      protein: 18,
+      fat: 10,
+      carbs: 5,
+      cooked: true
+    },
+    salmon: {
+      label: 'Salmón',
+      protein: 20,
+      fat: 13,
+      carbs: 0,
+      cooked: false
+    },
+    pescado_blanco: {
+      label: 'Pescado blanco (merluza, bacalao fresco...)',
+      protein: 18,
+      fat: 1,
+      carbs: 0,
+      cooked: false
+    },
+    atun_lata_natural: {
+      label: 'Atún en lata al natural (escurrido)',
+      protein: 24,
+      fat: 1,
+      carbs: 0,
+      cooked: true
+    },
+    atun_lata_aceite: {
+      label: 'Atún en lata en aceite (escurrido)',
+      protein: 24,
+      fat: 8,
+      carbs: 0,
+      cooked: true
+    },
+    sardinas_lata: {
+      label: 'Sardinas en lata',
+      protein: 22,
+      fat: 12,
+      carbs: 0,
+      cooked: true
+    },
+    gambas_cocidas: {
+      label: 'Gambas cocidas',
+      protein: 20,
+      fat: 1,
+      carbs: 1,
+      cooked: true
+    },
+    huevo_cocido: {
+      label: 'Huevo cocido',
+      protein: 13,
+      fat: 11,
+      carbs: 1,
+      cooked: true
+    },
+    huevo_entero: {
+      label: 'Huevo entero crudo',
+      protein: 12,
+      fat: 11,
+      carbs: 1,
+      cooked: false
+    },
+    clara_huevo: {
+      label: 'Clara de huevo',
+      protein: 11,
+      fat: 0,
+      carbs: 1,
+      cooked: false
+    },
+    tofu_firme: {
+      label: 'Tofu firme',
+      protein: 14,
+      fat: 8,
+      carbs: 3,
+      cooked: false
+    },
+
+    // ===== FRUTOS SECOS / SEMILLAS / GRASAS =====
+    frutos_secos_mixtos: {
+      label: 'Frutos secos mixtos (nuez/almendra/avellana)',
+      protein: 20,
+      fat: 50,
+      carbs: 15,
+      cooked: false
+    },
+    almendras: {
+      label: 'Almendras',
+      protein: 21,
+      fat: 52,
+      carbs: 9,
+      cooked: false
+    },
+    nueces: {
+      label: 'Nueces',
+      protein: 15,
+      fat: 65,
+      carbs: 7,
+      cooked: false
+    },
+    pistachos: {
+      label: 'Pistachos',
+      protein: 20,
+      fat: 50,
+      carbs: 18,
+      cooked: false
+    },
+    cacahuetes: {
+      label: 'Cacahuetes tostados',
+      protein: 25,
+      fat: 49,
+      carbs: 16,
+      cooked: false
+    },
+    crema_cacahuete: {
+      label: 'Crema de cacahuete',
+      protein: 25,
+      fat: 50,
+      carbs: 20,
+      cooked: false
+    },
+    semillas_chia: {
+      label: 'Semillas de chía',
+      protein: 17,
+      fat: 31,
+      carbs: 42,
+      cooked: false
+    },
+    semillas_sesamo: {
+      label: 'Semillas de sésamo',
+      protein: 18,
+      fat: 49,
+      carbs: 12,
+      cooked: false
+    },
+    aceite_oliva: {
+      label: 'Aceite de oliva virgen extra',
+      protein: 0,
+      fat: 100,
+      carbs: 0,
+      cooked: false
+    },
+    aceite_girasol: {
+      label: 'Aceite de girasol',
+      protein: 0,
+      fat: 100,
+      carbs: 0,
+      cooked: false
+    },
+    aguacate: {
+      label: 'Aguacate',
+      protein: 2,
+      fat: 15,
+      carbs: 9,
+      cooked: false
+    },
+    aceitunas_verdes: {
+      label: 'Aceitunas verdes',
+      protein: 1,
+      fat: 15,
+      carbs: 4,
+      cooked: false
+    },
+
+    // ===== FRUTA =====
+    fruta_mixta: {
+      label: 'Fruta troceada mixta (plátano/manzana/frutos rojos)',
+      protein: 1,
+      fat: 0,
+      carbs: 14,
+      cooked: false
+    },
+    platano: {
+      label: 'Plátano',
+      protein: 1,
+      fat: 0,
+      carbs: 20,
+      cooked: false
+    },
+    manzana: {
+      label: 'Manzana',
+      protein: 0,
+      fat: 0,
+      carbs: 14,
+      cooked: false
+    },
+    pera: {
+      label: 'Pera',
+      protein: 0,
+      fat: 0,
+      carbs: 12,
+      cooked: false
+    },
+    naranja: {
+      label: 'Naranja',
+      protein: 1,
+      fat: 0,
+      carbs: 12,
+      cooked: false
+    },
+    mandarina: {
+      label: 'Mandarina',
+      protein: 1,
+      fat: 0,
+      carbs: 13,
+      cooked: false
+    },
+    kiwi: {
+      label: 'Kiwi',
+      protein: 1,
+      fat: 1,
+      carbs: 15,
+      cooked: false
+    },
+    frutos_rojos: {
+      label: 'Frutos rojos',
+      protein: 1,
+      fat: 0,
+      carbs: 10,
+      cooked: false
+    },
+    uvas: {
+      label: 'Uvas',
+      protein: 0,
+      fat: 0,
+      carbs: 17,
+      cooked: false
+    },
+    pina: {
+      label: 'Piña',
+      protein: 0,
+      fat: 0,
+      carbs: 12,
+      cooked: false
+    },
+    melon: {
+      label: 'Melón',
+      protein: 1,
+      fat: 0,
+      carbs: 8,
+      cooked: false
+    },
+    sandia: {
+      label: 'Sandía',
+      protein: 1,
+      fat: 0,
+      carbs: 8,
+      cooked: false
+    },
+
+    // ===== VERDURAS / HORTALIZAS =====
+    brocoli: {
+      label: 'Brócoli',
+      protein: 3,
+      fat: 0,
+      carbs: 7,
+      cooked: false
+    },
+    calabacin: {
+      label: 'Calabacín',
+      protein: 1,
+      fat: 0,
+      carbs: 3,
+      cooked: false
+    },
+    berenjena: {
+      label: 'Berenjena',
+      protein: 1,
+      fat: 0,
+      carbs: 6,
+      cooked: false
+    },
+    pimiento_rojo: {
+      label: 'Pimiento rojo',
+      protein: 1,
+      fat: 0,
+      carbs: 6,
+      cooked: false
+    },
+    pimiento_verde: {
+      label: 'Pimiento verde',
+      protein: 1,
+      fat: 0,
+      carbs: 4,
+      cooked: false
+    },
+    cebolla: {
+      label: 'Cebolla',
+      protein: 1,
+      fat: 0,
+      carbs: 10,
+      cooked: false
+    },
+    tomate: {
+      label: 'Tomate',
+      protein: 1,
+      fat: 0,
+      carbs: 4,
+      cooked: false
+    },
+    zanahoria: {
+      label: 'Zanahoria',
+      protein: 1,
+      fat: 0,
+      carbs: 9,
+      cooked: false
+    },
+    espinaca: {
+      label: 'Espinaca fresca',
+      protein: 3,
+      fat: 0,
+      carbs: 2,
+      cooked: false
+    },
+    lechuga: {
+      label: 'Lechuga',
+      protein: 1,
+      fat: 0,
+      carbs: 2,
+      cooked: false
+    },
+    mezclum_ensalada: {
+      label: 'Ensalada verde (mezclum)',
+      protein: 2,
+      fat: 0,
+      carbs: 3,
+      cooked: false
+    },
+    coliflor: {
+      label: 'Coliflor',
+      protein: 2,
+      fat: 0,
+      carbs: 5,
+      cooked: false
+    },
+    champinones: {
+      label: 'Champiñones',
+      protein: 3,
+      fat: 0,
+      carbs: 3,
+      cooked: false
+    },
+    patata: {
+      label: 'Patata',
+      protein: 2,
+      fat: 0,
+      carbs: 17,
+      cooked: false
+    },
+    boniato: {
+      label: 'Boniato',
+      protein: 2,
+      fat: 0,
+      carbs: 20,
+      cooked: false
+    },
+    pepino: {
+      label: 'Pepino',
+      protein: 1,
+      fat: 0,
+      carbs: 3,
+      cooked: false
+    },
+
+    // ===== OTROS HABITUALES =====
+    azucar_blanco: {
+      label: 'Azúcar blanco',
+      protein: 0,
+      fat: 0,
+      carbs: 100,
+      cooked: false
+    },
+    miel: {
+      label: 'Miel',
+      protein: 0,
+      fat: 0,
+      carbs: 82,
+      cooked: false
+    },
+    chocolate_negro_70: {
+      label: 'Chocolate negro 70%',
+      protein: 7,
+      fat: 43,
+      carbs: 46,
+      cooked: false
+    },
+    tomate_frito: {
+      label: 'Tomate frito (industrial)',
+      protein: 2,
+      fat: 5,
+      carbs: 10,
+      cooked: true
+    },
+    mayonesa: {
+      label: 'Mayonesa',
+      protein: 1,
+      fat: 75,
+      carbs: 1,
+      cooked: false
+    },
+    salsa_soja: {
+      label: 'Salsa de soja',
+      protein: 8,
+      fat: 0,
+      carbs: 4,
+      cooked: false
+    }
+  };
+
+  // Mapeo de nombres de ingredientes en recetas -> claves de MMX_FOOD_DB
+  const NAME_TO_FOOD_KEY = {
+    // Lácteos / yogur / queso
+    'yogur natural o tipo skyr': 'yogur_skyr_natural',
+    'yogur tipo skyr': 'yogur_skyr_natural',
+    'yogur natural 0%': 'yogur_natural_0',
+    'yogur natural': 'yogur_natural_0',
+    'queso fresco batido': 'queso_fresco_batido_0',
+    'queso fresco tipo burgos': 'queso_fresco_burgos',
+
+    // Cereales
+    'copos de avena': 'copos_avena',
+    'pan integral': 'pan_integral',
+    'pasta integral cocida': 'pasta_integral_cocida',
+    'pasta integral': 'pasta_integral_cocida',
+    'arroz integral cocido': 'arroz_integral_cocido',
+    'arroz blanco cocido': 'arroz_blanco_cocido',
+
+    // Proteínas animales / legumbre
+    'pechuga de pollo': 'pechuga_pollo',
+    'lomo de salmón': 'salmon',
+    'filete de pescado blanco': 'pescado_blanco',
+    'albóndigas de carne magra (pavo o ternera magra)':
+      'albondigas_magra_cocinadas',
+    'atún al natural o en aceite escurrido': 'atun_lata_natural',
+    'garbanzos cocidos': 'garbanzos_cocidos',
+    'lentejas cocidas': 'lentejas_cocidas',
+    'huevo cocido': 'huevo_cocido',
+    'huevo': 'huevo_entero',
+
+    // Fruta / frutos secos / semillas
+    'fruta troceada (plátano, manzana o frutos rojos)': 'fruta_mixta',
+    'fruta troceada': 'fruta_mixta',
+    'fruta troceada mixta': 'fruta_mixta',
+    'frutos secos (nueces o almendras)': 'frutos_secos_mixtos',
+    'semillas (chía o sésamo)': 'semillas_chia',
+
+    // Verduras / ensaladas
+    'brócoli': 'brocoli',
+    'calabacín': 'calabacin',
+    'berenjena': 'berenjena',
+    'pimiento rojo': 'pimiento_rojo',
+    'cebolla': 'cebolla',
+    'tomate triturado o rallado': 'tomate',
+    'tomate': 'tomate',
+    'zanahoria rallada': 'zanahoria',
+    'zanahoria': 'zanahoria',
+    'ensalada verde (mezclum)': 'mezclum_ensalada',
+    'lechuga o mezclum': 'mezclum_ensalada',
+    'judías verdes': 'judias_verdes_cocidas',
+    'patata': 'patata',
+
+    // Grasas
+    'aceite de oliva virgen extra': 'aceite_oliva',
+    'aceitunas negras o verdes': 'aceitunas_verdes'
+  };
+
   // ---------- UTILIDADES COMUNES ----------
   const CONTACT_URL = 'https://metabolismix.com/contacto/';
 
@@ -31,6 +770,7 @@ exports.handler = async function (event, context) {
     'Este menú es orientativo y no sustituye el consejo de un profesional sanitario ni de un dietista-nutricionista.',
     'Si tienes patologías, medicación crónica, TCA, embarazo u otras situaciones clínicas, consulta siempre con un profesional antes de seguir cualquier pauta alimentaria.',
     'Las cantidades, macros y raciones son aproximadas y deben adaptarse a tu contexto, tolerancias digestivas y sensación de hambre/saciedad.',
+    'Las macros de cada plato se han estimado a partir de un repositorio interno de alimentos por 100 g; pueden diferir ligeramente de otras tablas de composición.',
     'Si tienes dudas sobre cómo adaptar este menú a tu caso, puedes escribirnos desde ' +
       `<a href="${CONTACT_URL}" target="_blank" rel="noopener noreferrer">${CONTACT_URL}</a>.`
   ];
@@ -121,7 +861,7 @@ exports.handler = async function (event, context) {
     headers: {
       ...cors,
       'Content-Type': 'application/json',
-      'x-chefbot-func-version': versionTag || 'v3-chefbot-2025-11-18'
+      'x-chefbot-func-version': versionTag || 'v4-chefbot-2025-11-18'
     },
     body: JSON.stringify(planObject)
   });
@@ -151,23 +891,22 @@ exports.handler = async function (event, context) {
   const fridgeText = (payload.fridgeIngredients || '').trim();
   const fridgeTokens = normalizeFridgeTokens(fridgeText);
 
-  // ---------- MACROS PARA CADA COMIDA (FALLBACK) ----------
-  function computePerMealMacros() {
-    // Distribuciones simples orientativas
+  // ---------- MACROS PARA CADA COMIDA (DISTRIBUCIÓN TEÓRICA) ----------
+  function computePerMealMacroTargets() {
     let weights;
     switch (numMealsRequested) {
       case 1:
         weights = [1];
         break;
       case 2:
-        weights = [0.55, 0.45]; // comida, cena
+        weights = [0.55, 0.45];
         break;
       case 3:
-        weights = [0.25, 0.45, 0.30]; // desayuno, comida, cena
+        weights = [0.25, 0.45, 0.30];
         break;
       case 4:
       default:
-        weights = [0.20, 0.40, 0.10, 0.30]; // desayuno, comida, snack, cena
+        weights = [0.2, 0.4, 0.1, 0.3];
         break;
     }
 
@@ -184,7 +923,6 @@ exports.handler = async function (event, context) {
       let c = Math.round(targetCarbs * w);
 
       if (isLast) {
-        // Ajuste final para que la suma se acerque a los objetivos
         p = Math.max(0, targetProtein - accP);
         f = Math.max(0, targetFat - accF);
         c = Math.max(0, targetCarbs - accC);
@@ -194,13 +932,65 @@ exports.handler = async function (event, context) {
       accF += f;
       accC += c;
 
-      perMeal.push({
-        protein_g: p,
-        fat_g: f,
-        carbs_g: c
-      });
+      perMeal.push({ protein_g: p, fat_g: f, carbs_g: c });
     }
     return perMeal;
+  }
+
+  // ---------- AYUDA: RESOLVER INGREDIENTE -> ENTRADA BBDD ----------
+  function resolveFoodKeyFromName(name) {
+    if (!name || typeof name !== 'string') return null;
+    const n = name.toLowerCase().trim();
+
+    // 1) Alias explícitos
+    for (const [alias, key] of Object.entries(NAME_TO_FOOD_KEY)) {
+      if (n.includes(alias)) return key;
+    }
+
+    // 2) Coincidencia por label aproximado
+    for (const [key, entry] of Object.entries(MMX_FOOD_DB)) {
+      const labelNorm = (entry.label || '').toLowerCase();
+      if (!labelNorm) continue;
+      if (n === labelNorm || n.includes(labelNorm) || labelNorm.includes(n)) {
+        return key;
+      }
+    }
+    return null;
+  }
+
+  function computeMealMacrosFromIngredients(meal) {
+    const ingredients = Array.isArray(meal.ingredients) ? meal.ingredients : [];
+    let p = 0;
+    let f = 0;
+    let c = 0;
+    let matchedCount = 0;
+
+    for (const ing of ingredients) {
+      const qty = safeNumber(ing.quantity_grams, 0);
+      if (qty <= 0) continue;
+      const key = resolveFoodKeyFromName(ing.name);
+      if (!key) continue;
+
+      const food = MMX_FOOD_DB[key];
+      if (!food) continue;
+
+      const factor = qty / 100;
+      p += food.protein * factor;
+      f += food.fat * factor;
+      c += food.carbs * factor;
+      matchedCount++;
+    }
+
+    if (!matchedCount) {
+      return { protein_g: 0, fat_g: 0, carbs_g: 0, matchedCount: 0 };
+    }
+
+    return {
+      protein_g: Math.round(p),
+      fat_g: Math.round(f),
+      carbs_g: Math.round(c),
+      matchedCount
+    };
   }
 
   // ---------- CARTA FALLBACK (PLANTILLAS) ----------
@@ -627,7 +1417,11 @@ exports.handler = async function (event, context) {
           'Snack sencillo de pan integral con lácteo fresco y verdura.',
         ingredients: [
           { name: 'Pan integral', quantity_grams: 40, notes: '' },
-          { name: 'Queso fresco tipo burgos', quantity_grams: 60, notes: '' },
+          {
+            name: 'Queso fresco tipo burgos',
+            quantity_grams: 60,
+            notes: ''
+          },
           { name: 'Tomate', quantity_grams: 40, notes: 'En rodajas' },
           {
             name: 'Aceite de oliva virgen extra',
@@ -647,7 +1441,6 @@ exports.handler = async function (event, context) {
   // ---------- SELECCIÓN DE PLATO FALLBACK CON NEVERA ----------
   function pickBreakfastFromFallback() {
     const list = breakfastTemplates();
-    // Para desayunos no forzamos nevera; mantenemos platos tipo estándar.
     return chooseRandom(list) || list[0];
   }
 
@@ -655,13 +1448,12 @@ exports.handler = async function (event, context) {
     let list = lunchTemplates();
     if (!list.length) return null;
 
-    // Preferencias según nevera
     const prefs = [
       { token: 'albondig', ids: ['comida_albondigas_arroz'] },
       { token: 'salmon', ids: ['comida_salmon_patat'] },
       { token: 'atun', ids: ['comida_pasta_atun'] },
       { token: 'garbanzo', ids: ['comida_garbanzo_ensalada'] },
-      { token: 'lentej', ids: ['comida_garbanzo_ensalada'] }, // legumbre alternativa
+      { token: 'lentej', ids: ['comida_garbanzo_ensalada'] },
       { token: 'pollo', ids: ['comida_pollo_arroz'] }
     ];
 
@@ -706,98 +1498,59 @@ exports.handler = async function (event, context) {
 
   // ---------- CONSTRUCCIÓN DEL PLAN FALLBACK COMPLETO ----------
   function buildFallbackDayPlan(technicalReason) {
-    const perMealMacros = computePerMealMacros();
+    const perMealTargets = computePerMealMacroTargets();
     const meals = [];
 
+    function attachMacros(meal, defaultTargets) {
+      const m = { ...meal };
+      const fromRepo = computeMealMacrosFromIngredients(m);
+      const sumRepo =
+        fromRepo.protein_g + fromRepo.fat_g + fromRepo.carbs_g;
+
+      if (sumRepo > 0 && fromRepo.matchedCount > 0) {
+        m.macros = {
+          protein_g: fromRepo.protein_g,
+          fat_g: fromRepo.fat_g,
+          carbs_g: fromRepo.carbs_g
+        };
+      } else {
+        m.macros = {
+          protein_g: defaultTargets.protein_g,
+          fat_g: defaultTargets.fat_g,
+          carbs_g: defaultTargets.carbs_g
+        };
+      }
+      m.source = 'fallback';
+      return m;
+    }
+
     if (numMealsRequested === 1) {
-      // Solo una comida principal (tipo comida)
       const m = pickLunchFromFallback();
-      if (m) {
-        meals.push({
-          ...m,
-          source: 'fallback',
-          macros: perMealMacros[0]
-        });
-      }
+      if (m) meals.push(attachMacros(m, perMealTargets[0]));
     } else if (numMealsRequested === 2) {
-      const lunch = pickLunchFromFallback();
-      const dinner = pickDinnerFromFallback();
-      if (lunch) {
-        meals.push({
-          ...lunch,
-          source: 'fallback',
-          macros: perMealMacros[0]
-        });
-      }
-      if (dinner) {
-        meals.push({
-          ...dinner,
-          source: 'fallback',
-          macros: perMealMacros[1]
-        });
-      }
+      const l = pickLunchFromFallback();
+      const d = pickDinnerFromFallback();
+      if (l) meals.push(attachMacros(l, perMealTargets[0]));
+      if (d) meals.push(attachMacros(d, perMealTargets[1]));
     } else if (numMealsRequested === 3) {
       const b = pickBreakfastFromFallback();
       const l = pickLunchFromFallback();
       const d = pickDinnerFromFallback();
-      if (b) {
-        meals.push({
-          ...b,
-          source: 'fallback',
-          macros: perMealMacros[0]
-        });
-      }
-      if (l) {
-        meals.push({
-          ...l,
-          source: 'fallback',
-          macros: perMealMacros[1]
-        });
-      }
-      if (d) {
-        meals.push({
-          ...d,
-          source: 'fallback',
-          macros: perMealMacros[2]
-        });
-      }
+      if (b) meals.push(attachMacros(b, perMealTargets[0]));
+      if (l) meals.push(attachMacros(l, perMealTargets[1]));
+      if (d) meals.push(attachMacros(d, perMealTargets[2]));
     } else {
-      // 4 comidas: desayuno, comida, snack, cena
       const b = pickBreakfastFromFallback();
       const l = pickLunchFromFallback();
       const s = pickSnackFromFallback();
       const d = pickDinnerFromFallback();
-      if (b) {
-        meals.push({
-          ...b,
-          source: 'fallback',
-          macros: perMealMacros[0]
-        });
-      }
-      if (l) {
-        meals.push({
-          ...l,
-          source: 'fallback',
-          macros: perMealMacros[1]
-        });
-      }
-      if (s) {
-        meals.push({
-          ...s,
-          source: 'fallback',
-          macros: perMealMacros[2]
-        });
-      }
-      if (d) {
-        meals.push({
-          ...d,
-          source: 'fallback',
-          macros: perMealMacros[3]
-        });
-      }
+      if (b) meals.push(attachMacros(b, perMealTargets[0]));
+      if (l) meals.push(attachMacros(l, perMealTargets[1]));
+      if (s) meals.push(attachMacros(s, perMealTargets[2]));
+      if (d) meals.push(attachMacros(d, perMealTargets[3]));
     }
 
-    // Recalcular macros totales a partir de los de cada comida
+    // Macros totales reales (según ingredientes/tabla)
     const total_macros = meals.reduce(
       (acc, m) => {
         const mm = m.macros || {};
@@ -842,7 +1595,15 @@ exports.handler = async function (event, context) {
         targetCarbs
       )} g de hidratos de carbono.`
     );
-
+    tips.push(
+      `Las macros totales estimadas para este menú son: ${Math.round(
+        total_macros.protein_g
+      )} g de proteína, ${Math.round(
+        total_macros.fat_g
+      )} g de grasa y ${Math.round(
+        total_macros.carbs_g
+      )} g de hidratos de carbono.`
+    );
     if (fridgeText) {
       tips.push(
         `Se ha intentado tener en cuenta algunos de los ingredientes de tu nevera: "${fridgeText}".`
@@ -868,13 +1629,12 @@ exports.handler = async function (event, context) {
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
   if (!GEMINI_API_KEY) {
     const plan = buildFallbackDayPlan('configuración: falta GEMINI_API_KEY');
-    return buildResponse(plan, 'v3-chefbot-fallback-no-key');
+    return buildResponse(plan, 'v4-chefbot-fallback-no-key');
   }
 
-// ---------- LLAMADA A GEMINI ----------
-const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-
+  // ---------- LLAMADA A GEMINI ----------
+  const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
   const systemPrompt = `
 Eres un planificador de menús diarios orientativos, no un profesional sanitario.
@@ -900,7 +1660,7 @@ Formato de salida (JSON plano, sin texto extra):
       "total_macros": { "protein_g": number, "fat_g": number, "carbs_g": number },
       "meals": [
         {
-          "meal_type": string,        // p.ej. "Desayuno", "Comida", "Cena", "Merienda / Snack"
+          "meal_type": string,
           "recipe_name": string,
           "short_description": string,
           "macros": { "protein_g": number, "fat_g": number, "carbs_g": number },
@@ -969,10 +1729,9 @@ Genera un único menú de 1 día que siga las reglas anteriores y el formato JSO
 
     const raw = await res.text();
     if (!res.ok) {
-      // Si Gemini responde con error (incluyendo 503), pasamos a fallback
       const reason = `error API (${res.status})`;
       const plan = buildFallbackDayPlan(reason);
-      return buildResponse(plan, 'v3-chefbot-fallback-api-error');
+      return buildResponse(plan, 'v4-chefbot-fallback-api-error');
     }
 
     apiJson = raw ? JSON.parse(raw) : {};
@@ -982,7 +1741,7 @@ Genera un único menú de 1 día que siga las reglas anteriores y el formato JSO
         ? 'timeout al llamar a la IA'
         : 'error de red al llamar a la IA';
     const plan = buildFallbackDayPlan(reason);
-    return buildResponse(plan, 'v3-chefbot-fallback-timeout');
+    return buildResponse(plan, 'v4-chefbot-fallback-timeout');
   }
 
   // ---------- NORMALIZACIÓN DE LA RESPUESTA IA ----------
@@ -1000,17 +1759,15 @@ Genera un único menú de 1 día que siga las reglas anteriores y el formato JSO
     !parsed.days[0].meals.length
   ) {
     const plan = buildFallbackDayPlan('respuesta IA no válida o vacía');
-    return buildResponse(plan, 'v3-chefbot-fallback-invalid-json');
+    return buildResponse(plan, 'v4-chefbot-fallback-invalid-json');
   }
 
-  // Aseguramos campos mínimos y añadimos source: "ai" a cada comida
   const day0 = parsed.days[0];
   const meals = day0.meals.map((m) => ({
     ...m,
     source: 'ai'
   }));
 
-  // Recalcular totales si faltan o son incoherentes
   const total_macros = meals.reduce(
     (acc, m) => {
       const mm = m.macros || {};
@@ -1032,7 +1789,6 @@ Genera un único menú de 1 día que siga las reglas anteriores y el formato JSO
     meals
   };
 
-  // Lista de la compra (por si el modelo no la ha calculado bien)
   const shopping_map = new Map();
   for (const meal of meals) {
     const ings = Array.isArray(meal.ingredients) ? meal.ingredients : [];
@@ -1069,17 +1825,9 @@ Genera un único menú de 1 día que siga las reglas anteriores y el formato JSO
       )} g de grasa y ${Math.round(
         targetCarbs
       )} g de hidratos de carbono.`,
-      ...(fridgeText
-        ? [
-            `Se ha intentado utilizar al menos uno de los ingredientes de tu nevera en alguna de las comidas: "${fridgeText}".`
-          ]
-        : []),
       ...extraTips
     ]
   };
 
-  return buildResponse(planFromAi, 'v3-chefbot-ai-ok');
+  return buildResponse(planFromAi, 'v4-chefbot-ai-ok');
 };
-
-
-
