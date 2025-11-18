@@ -65,6 +65,11 @@
         <div class="text-center mb-8">
             <h1 class="text-4xl font-bold"><span class="text-gradient-turquesa">Chef-Bot</span></h1>
             <p class="mt-2 text-lg text-gray-500">Tu Chef IA personal: precisión en macros, seguridad en las restricciones y variedad en el plato.</p>
+            <!-- Descargo de responsabilidad visible -->
+            <p class="mt-3 text-xs text-gray-400 max-w-xl mx-auto">
+                Chef-Bot genera menús orientativos con inteligencia artificial. No sustituye el consejo de un profesional sanitario ni de un dietista-nutricionista.
+                Consulta siempre con un profesional antes de realizar cambios importantes en tu alimentación.
+            </p>
         </div>
 
         <!-- Sección de Objetivos y Filtros -->
@@ -105,7 +110,7 @@
                 </div>
             </div>
 
-            <!-- Selector de Número de Comidas + Restricciones -->
+            <!-- Selector de Número de Comidas y Días + Restricciones -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <!-- Comidas Diarias -->
                 <div>
@@ -119,9 +124,15 @@
                         <option value="4" selected>4 comidas</option>
                     </select>
                 </div>
-                
-                <!-- (Hueco que antes ocupaban los días a planificar, mantenemos la rejilla limpia en pantallas grandes) -->
-                <div class="hidden md:block"></div>
+                <!-- Días a Planificar (oculto lógicamente: 1 día fijo en backend, pero dejamos el hueco para estética simétrica si lo quisieras reusar) -->
+                <div>
+                    <label class="block text-sm font-medium text-cyan-700 mb-1">
+                        Días a planificar
+                    </label>
+                    <p class="mt-1 block w-full px-4 py-2 bg-cyan-100 text-sm text-cyan-800 rounded-lg shadow-inner border border-cyan-300">
+                        1 día (Chef-Bot genera un día tipo)
+                    </p>
+                </div>
                 
                 <!-- Filtros Dietéticos -->
                 <div class="col-span-1">
@@ -131,27 +142,27 @@
             </div>
 
             <button id="generateMenusBtn" class="w-full mt-3 px-6 py-3 border-4 border-white text-base font-medium rounded-xl text-white bg-gradient-turquesa hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 shadow-lg transition-transform transform hover:scale-[1.01] active:scale-100">
-                Generar plan del día (ignorar nevera)
+                Generar ejemplo de día (ignorar nevera)
             </button>
         </div>
         
         <!-- Sección "Qué tengo en la nevera" -->
         <div class="fridge-section p-6 rounded-xl mb-8">
             <h2 class="text-2xl font-semibold text-cyan-900 mb-3 flex items-center">
-                <svg class="icon w-6 h-6 mr-2 text-cyan-700" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 3h10a2 2 0 0 1 2 2v14a 2 2 0 0 1-2 2H7a 2 2 0 0 1-2-2V5a 2 2 0 0 1 2-2z"></path><path d="M17 17H7"></path><path d="M17 13H7"></path><path d="M10 9H7"></path></svg>
+                <svg class="icon w-6 h-6 mr-2 text-cyan-700" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path><path d="M17 17H7"></path><path d="M17 13H7"></path><path d="M10 9H7"></path></svg>
                 ¡Qué tengo en la nevera!
             </h2>
             <p class="text-sm text-cyan-700 mb-3">Escribe los ingredientes que tienes disponibles (por ejemplo, pechuga de pollo, brócoli, pasta). Chef-Bot intentará priorizarlos en el menú.</p>
             <textarea id="fridgeIngredients" rows="2" placeholder="Ej.: pechuga de pollo, brócoli, arroz, aguacate, leche..." class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-400 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500"></textarea>
             
             <button id="generateFridgeBtn" class="w-full mt-4 px-6 py-3 border-4 border-white text-base font-medium rounded-xl text-white bg-gradient-turquesa hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 shadow-lg transition-transform transform hover:scale-[1.01] active:scale-100">
-                Generar plan del día ¡con mi nevera!
+                Generar ejemplo de día ¡con mi nevera!
             </button>
         </div>
 
         <!-- Sección de Menús Generados -->
         <div id="generatedMenus" class="hidden">
-            <h2 class="text-2xl font-semibold text-gray-700 mb-4" id="menusTitle">Plan diario sugerido</h2>
+            <h2 class="text-2xl font-semibold text-gray-700 mb-4" id="menusTitle">Ejemplo de día sugerido</h2>
             <div id="menusContainer" class="space-y-8">
                 <!-- Los menús generados se mostrarán aquí -->
             </div>
@@ -199,7 +210,7 @@
         };
 
         /**
-         * Llamada a Netlify + Gemini para generar un plan diario completo.
+         * Llamada a Netlify + Gemini para generar un plan de 1 día completo.
          * @param {boolean} useFridge Si debe usarse el texto de nevera.
          */
         async function generateWeeklyPlanByAI(useFridge = false) {
@@ -210,9 +221,6 @@
             const dietaryFilter = dietaryFilterInput.value.trim();
             const fridgeText = useFridge ? fridgeIngredientsInput.value.trim() : "";
 
-            // SIEMPRE 1 día
-            const numDays = 1;
-
             if (pTarget <= 0 || fTarget <= 0 || cTarget <= 0) {
                 alert('Introduce macros válidos para proteína, grasas y carbohidratos.');
                 return;
@@ -221,12 +229,14 @@
             // Placeholder de carga
             menusContainer.innerHTML = `
                 <div class="text-center p-8 bg-white rounded-xl shadow-inner border border-cyan-300">
-                    <h3 class="text-xl font-semibold text-cyan-700">Calculando plan con IA...</h3>
-                    <p class="mt-2 text-gray-500 animate-pulse">Chef-Bot está diseñando ${numDays} día y ${numMeals} comidas ajustando tus macros, restricciones y estilo mediterráneo.</p>
+                    <h3 class="text-xl font-semibold text-cyan-700">Calculando ejemplo de día con IA...</h3>
+                    <p class="mt-2 text-gray-500 animate-pulse">
+                        Chef-Bot está diseñando 1 día con ${numMeals} comidas, ajustando tus macros, restricciones y estilo mediterráneo de manera orientativa.
+                    </p>
                 </div>
             `;
             generatedMenusSection.classList.remove('hidden');
-            menusTitle.textContent = 'Plan diario sugerido';
+            menusTitle.textContent = `Ejemplo de día sugerido`;
 
             const payload = {
                 dailyMacros: {
@@ -235,7 +245,7 @@
                     carbs_g: cTarget
                 },
                 numMeals,
-                numDays,
+                numDays: 1, // En backend ya asumimos 1 día, pero lo dejamos documentado
                 dietaryFilter,
                 fridgeIngredients: fridgeText,
                 style: 'mediterranea'
@@ -263,15 +273,18 @@
                 console.error(error);
                 menusContainer.innerHTML = `
                     <div class="text-center p-8 bg-white rounded-xl shadow-inner border border-red-200">
-                        <h3 class="text-xl font-semibold text-red-600">No se ha podido generar el plan con IA</h3>
-                        <p class="mt-2 text-red-500">Inténtalo de nuevo en unos minutos. Si el problema persiste, revisa la configuración de la API en Netlify o contáctanos desde <a href="https://metabolismix.com/contacto/" target="_blank" rel="noopener noreferrer" class="underline text-red-600">https://metabolismix.com/contacto/</a>.</p>
+                        <h3 class="text-xl font-semibold text-red-600">No se ha podido generar el ejemplo de día con IA</h3>
+                        <p class="mt-2 text-red-500">
+                            Inténtalo de nuevo en unos minutos. Si el problema persiste y eres el desarrollador,
+                            revisa la configuración de la API en Netlify (GEMINI_API_KEY).
+                        </p>
                     </div>
                 `;
             }
         }
 
         /**
-         * Renderiza el plan diario devuelto por la IA.
+         * Renderiza el plan devuelto por la IA.
          * Estructura esperada (simplificada):
          * {
          *   mode: "week",
@@ -298,19 +311,22 @@
          */
         function renderPlan(plan, pTarget, fTarget, cTarget) {
             const days = Array.isArray(plan.days) ? plan.days : [];
+            const planName = plan.plan_name || 'Plan no disponible';
+            const generalTips = Array.isArray(plan.general_tips) ? plan.general_tips : [];
 
             if (!days.length) {
-                const tips = Array.isArray(plan.general_tips) ? plan.general_tips : [];
-                const tipsHtml = tips.length
-                    ? `<ul class="list-disc list-inside text-sm text-gray-700 mt-3 space-y-1 text-left">
-                        ${tips.map(t => `<li>${t}</li>`).join('')}
+                // Fallback elegante usando el mensaje del backend
+                const tipsHtml = generalTips.length
+                    ? `<ul class="list-disc list-inside text-sm text-gray-700 mt-3 text-left">
+                        ${generalTips.map(t => `<li>${t}</li>`).join('')}
                        </ul>`
-                    : '';
+                    : `<p class="mt-2 text-sm text-gray-600">
+                        Chef-Bot no ha podido generar un menú en este momento. Prueba de nuevo más tarde.
+                       </p>`;
 
                 menusContainer.innerHTML = `
                     <div class="text-center p-8 bg-white rounded-xl shadow-inner border border-yellow-200">
-                        <h3 class="text-xl font-semibold text-yellow-700">No se ha podido generar el menú con IA</h3>
-                        <p class="mt-2 text-gray-600">Chef-Bot ha tenido un problema al crear tu menú automático.</p>
+                        <h3 class="text-xl font-semibold text-yellow-700">${planName}</h3>
                         ${tipsHtml}
                     </div>
                 `;
@@ -339,6 +355,7 @@
                         
                         <div class="space-y-4">
                 `;
+
                 meals.forEach((meal, mealIndex) => {
                     const mealIdBase = `${dayIndex}-${mealIndex}`;
                     const mealType = meal.meal_type || 'Comida';
