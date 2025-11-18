@@ -201,6 +201,11 @@ exports.handler = async function (event, context) {
       name: 'Manzana',
       macrosPer100g: { protein_g: 0.3, fat_g: 0.2, carbs_g: 14 }
     },
+    potato: {
+      id: 'potato',
+      name: 'Patata cocida',
+      macrosPer100g: { protein_g: 2, fat_g: 0.1, carbs_g: 17 }
+    },
     oliveOil: {
       id: 'oliveOil',
       name: 'Aceite de oliva virgen extra',
@@ -210,11 +215,6 @@ exports.handler = async function (event, context) {
       id: 'nuts',
       name: 'Frutos secos (nueces/almendras)',
       macrosPer100g: { protein_g: 18, fat_g: 55, carbs_g: 13 }
-    },
-    potato: {
-      id: 'potato',
-      name: 'Patata cocida',
-      macrosPer100g: { protein_g: 2, fat_g: 0.1, carbs_g: 17 }
     }
   };
 
@@ -275,6 +275,7 @@ exports.handler = async function (event, context) {
       ];
 
       return {
+        source: 'fallback',
         meal_type: meal_type || 'Desayuno',
         recipe_name,
         short_description:
@@ -289,7 +290,7 @@ exports.handler = async function (event, context) {
       };
     }
 
-    // --- Comida: pollo + arroz integral + brócoli + aceite ---
+    // --- Comida: pollo + arroz integral + brócoli + verduras + aceite ---
     if (isLunch || (!isDinner && !isBreakfast && !isSnack)) {
       const p100 = BASE_FOODS.chicken.macrosPer100g;
       const r100 = BASE_FOODS.rice.macrosPer100g;
@@ -319,18 +320,22 @@ exports.handler = async function (event, context) {
         { name: 'Pechuga de pollo', quantity_grams: Math.round(chickenGr), notes: 'En dados o tiras' },
         { name: 'Arroz integral cocido', quantity_grams: Math.round(riceGr), notes: '' },
         { name: 'Brócoli', quantity_grams: Math.round(broccoliGr), notes: 'En ramilletes' },
+        { name: 'Cebolla', quantity_grams: 40, notes: 'Picada' },
+        { name: 'Pimiento rojo', quantity_grams: 40, notes: 'En tiras' },
         { name: 'Aceite de oliva virgen extra', quantity_grams: Math.round(oilGr), notes: 'Para cocinar y aliñar' }
       ];
 
-      recipe_name = 'Bol de pollo con arroz integral, brócoli y aceite de oliva';
+      recipe_name = 'Bol de pollo con arroz integral, brócoli y verduras salteadas';
       steps = [
         'Cocina el arroz integral siguiendo las instrucciones del envase.',
-        'Saltea el pollo en una sartén con parte del aceite hasta que esté bien hecho.',
-        'Añade el brócoli troceado y saltea unos minutos más, o cuécelo al vapor aparte.',
-        'Sirve el arroz en la base del plato, coloca el pollo y el brócoli encima y termina con el resto del aceite en crudo.'
+        'Saltea la cebolla y el pimiento en una sartén con parte del aceite.',
+        'Añade el pollo troceado y cocina hasta que esté bien hecho.',
+        'Incorpora el brócoli (salteado o al vapor) y mezcla todo.',
+        'Sirve el arroz en la base del plato, coloca el salteado de pollo y verduras encima y termina con el resto del aceite en crudo.'
       ];
 
       return {
+        source: 'fallback',
         meal_type: meal_type || 'Comida',
         recipe_name,
         short_description:
@@ -345,47 +350,39 @@ exports.handler = async function (event, context) {
       };
     }
 
-    // --- Cena: salmón + patata + brócoli + aceite ---
-    const s100 = BASE_FOODS.salmon.macrosPer100g;
-    const p100 = BASE_FOODS.potato.macrosPer100g;
-    const b100 = BASE_FOODS.broccoli.macrosPer100g;
+    // --- Cena: guiso/bol de lentejas con verduras (legumbre) + aceite ---
+    const l100 = BASE_FOODS.lentils.macrosPer100g;
     const o100 = BASE_FOODS.oliveOil.macrosPer100g;
 
-    const salmonGr = clamp(gramsFromMacro(P * 0.75, s100.protein_g), 120, 220);
-    const potatoGr = clamp(gramsFromMacro(C * 0.7, p100.carbs_g), 120, 260);
-    const broccoliGr = clamp(100, 60, 180);
-    const oilGr = clamp(F, 5, 15);
+    // Priorizamos ajustar proteína y dejamos que el resto se acerque
+    const lentilsGr = clamp(gramsFromMacro(P * 0.8, l100.protein_g), 150, 350);
+    const oilGr = clamp(F, 5, 18);
 
-    macros.protein_g =
-      (s100.protein_g * salmonGr) / 100 +
-      (p100.protein_g * potatoGr) / 100 +
-      (b100.protein_g * broccoliGr) / 100;
-    macros.fat_g =
-      (s100.fat_g * salmonGr) / 100 +
-      (p100.fat_g * potatoGr) / 100 +
-      (b100.fat_g * broccoliGr) / 100 +
-      (o100.fat_g * oilGr) / 100;
-    macros.carbs_g =
-      (s100.carbs_g * salmonGr) / 100 +
-      (p100.carbs_g * potatoGr) / 100 +
-      (b100.carbs_g * broccoliGr) / 100;
+    macros.protein_g = (l100.protein_g * lentilsGr) / 100;
+    macros.fat_g = (l100.fat_g * lentilsGr) / 100 + (o100.fat_g * oilGr) / 100;
+    macros.carbs_g = (l100.carbs_g * lentilsGr) / 100;
 
     ingredients = [
-      { name: 'Salmón', quantity_grams: Math.round(salmonGr), notes: 'Lomo o filete' },
-      { name: 'Patata cocida', quantity_grams: Math.round(potatoGr), notes: 'En dados o rodajas' },
-      { name: 'Brócoli', quantity_grams: Math.round(broccoliGr), notes: 'En ramilletes' },
-      { name: 'Aceite de oliva virgen extra', quantity_grams: Math.round(oilGr), notes: 'Para cocinar y aliñar' }
+      { name: 'Lentejas cocidas', quantity_grams: Math.round(lentilsGr), notes: 'Escurridas' },
+      { name: 'Cebolla', quantity_grams: 40, notes: 'Picada' },
+      { name: 'Pimiento rojo', quantity_grams: 40, notes: 'En tiras' },
+      { name: 'Tomate', quantity_grams: 60, notes: 'Trocitos o triturado' },
+      { name: 'Zanahoria', quantity_grams: 50, notes: 'En rodajas finas (opcional)' },
+      { name: 'Ensalada verde (mezclum)', quantity_grams: 40, notes: 'Para acompañar' },
+      { name: 'Aceite de oliva virgen extra', quantity_grams: Math.round(oilGr), notes: 'Para sofreír y aliñar' }
     ];
 
-    recipe_name = 'Salmón con patata y brócoli al horno';
+    recipe_name = 'Bol de lentejas estofadas con verduras y ensalada verde';
     steps = [
-      'Precalienta el horno a unos 180–200 ºC.',
-      'Coloca el salmón en una bandeja con parte del aceite, sal y las especias que prefieras.',
-      'Añade la patata cocida troceada y el brócoli alrededor, rocía con el resto del aceite y mezcla ligeramente.',
-      'Hornea hasta que el salmón esté hecho y las verduras ligeramente doradas.'
+      'En una cazuela, sofríe la cebolla y el pimiento con parte del aceite hasta que estén tiernos.',
+      'Añade la zanahoria y el tomate, y cocina unos minutos más.',
+      'Incorpora las lentejas cocidas, mezcla bien y deja que se caliente todo junto a fuego suave.',
+      'Sirve las lentejas en un bol y acompáñalas con una pequeña ensalada verde aliñada con el resto del aceite.',
+      'Ajusta sal y especias (pimentón, comino, pimienta…) al gusto.'
     ];
 
     return {
+      source: 'fallback',
       meal_type: meal_type || 'Cena',
       recipe_name,
       short_description:
@@ -429,7 +426,7 @@ exports.handler = async function (event, context) {
     const styleLabel = style || 'mediterránea';
 
     const prompt = `
-Eres un asistente CULINARIO (no médico). 
+Eres un asistente CULINARIO (no médico).
 Tu tarea es proponer UNA sola receta sencilla estilo ${styleLabel}, apta para una persona adulta sana, a partir de estos objetivos aproximados de macronutrientes:
 
 - Proteína objetivo: ~${Math.round(P)} g
@@ -439,13 +436,14 @@ Tu tarea es proponer UNA sola receta sencilla estilo ${styleLabel}, apta para un
 Tipo de comida: "${meal_type || 'Comida'}".
 
 Restricciones dietéticas declaradas por el usuario (texto libre, NO es consejo médico): "${dietaryFilter || 'ninguna específica'}".
-
 Ingredientes en la nevera (texto libre, úsalo solo como guía si ayuda): "${fridgeIngredients || 'no especificado'}".
 
 REGLAS IMPORTANTES:
 - No des consejos médicos ni nutricionales personalizados.
 - No menciones enfermedades, medicación, TCA, embarazo ni ajustes clínicos.
 - El menú es general y orientativo, para población adulta sana.
+- Ajusta los macronutrientes lo más cerca posible de los objetivos (idealmente dentro de ±10 % en proteína, grasa e hidratos).
+- Las cantidades en gramos deben ser coherentes con los macros (no inventes valores imposibles).
 - Devuelve SOLO un objeto JSON válido, sin texto adicional, sin comentarios y SIN bloques de código.
 - Usa cantidades en GRAMOS enteros para los ingredientes.
 - Mantén la receta casera, corta y realista.
@@ -478,7 +476,7 @@ ESQUEMA JSON QUE DEBES DEVOLVER, SIN NINGÚN TEXTO MÁS:
     const payload = {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.5,
+        temperature: 0.3,         // más pegado al objetivo
         maxOutputTokens: 512
       }
     };
@@ -595,18 +593,18 @@ ESQUEMA JSON QUE DEBES DEVOLVER, SIN NINGÚN TEXTO MÁS:
     try {
       const aiMeal = await callGeminiForMeal(slot, apiKey, model, timeoutMs);
       if (isValidMealObject(aiMeal)) {
-        // Normalización mínima
         aiMeal.meal_type = aiMeal.meal_type || slot.meal_type;
         aiMeal.short_description =
           aiMeal.short_description ||
           'Plato generado con ayuda de IA de forma orientativa. No sustituye el consejo de un profesional sanitario.';
+        aiMeal.source = 'ai';
         return aiMeal;
       }
-      // Si por lo que sea no pasa la validación, caemos a fallback
-      return buildFallbackMeal(slot);
+      const fb = buildFallbackMeal(slot);
+      return fb;
     } catch (err) {
-      // Cualquier error de red, timeout, políticas, formato... → fallback
-      return buildFallbackMeal(slot);
+      const fb = buildFallbackMeal(slot);
+      return fb;
     }
   }
 
