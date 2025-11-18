@@ -23,7 +23,6 @@
     .menu-item {
       animation: fadeIn 0.5s ease-out forwards;
     }
-    /* Paleta Turquesa-Azul */
     .bg-gradient-turquesa {
       background-image: linear-gradient(to right, #00b8d4, #00a8c2);
     }
@@ -33,7 +32,7 @@
       -webkit-text-fill-color: transparent;
     }
     .icon {
-      display: none; /* Ocultar iconos no esenciales para la estética simple */
+      display: none;
       width: 1em;
       height: 1em;
       stroke-width: 2;
@@ -44,12 +43,10 @@
       vertical-align: middle;
       margin-right: 0.25rem;
     }
-    /* Recuadro de la nevera para destacarlo */
     .fridge-section {
-      background-color: #e0f7fa; /* Turquesa muy claro */
+      background-color: #e0f7fa;
       border: 2px dashed #00b8d4;
     }
-    /* Estilos para el selector de opciones (por si en el futuro quieres reintroducir opciones) */
     .option-selector input[type="radio"]:checked + label {
       background-color: #00b8d4;
       color: white;
@@ -60,7 +57,6 @@
 </head>
 <body class="bg-gray-100 min-h-screen flex items-center justify-center py-10 px-4">
   <div class="container mx-auto p-6 bg-white rounded-2xl shadow-xl border border-gray-200">
-    <!-- Título -->
     <div class="text-center mb-8">
       <h1 class="text-4xl font-bold">
         <span class="text-gradient-turquesa">Chef-Bot</span>
@@ -74,13 +70,10 @@
       </p>
     </div>
 
-    <!-- Sección de Objetivos y Filtros -->
     <div class="bg-cyan-50 p-6 rounded-xl mb-6 border border-cyan-200">
       <h2 class="text-2xl font-semibold text-cyan-800 mb-4">Mis Objetivos Diarios</h2>
 
-      <!-- Entrada de Macros y Calorías -->
       <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <!-- Proteína -->
         <div>
           <label for="targetProtein" class="block text-sm font-medium text-cyan-700">
             Proteína (g)
@@ -92,7 +85,6 @@
             value="180"
             class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
         </div>
-        <!-- Grasas -->
         <div>
           <label for="targetFat" class="block text-sm font-medium text-cyan-700">
             Grasas (g)
@@ -104,7 +96,6 @@
             value="80"
             class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
         </div>
-        <!-- Carbohidratos -->
         <div>
           <label for="targetCarbs" class="block text-sm font-medium text-cyan-700">
             Carbohidratos (g)
@@ -116,7 +107,6 @@
             value="250"
             class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
         </div>
-        <!-- Calorías Estimadas -->
         <div>
           <label class="block text-sm font-medium text-cyan-700">
             Calorías (kcal)
@@ -129,9 +119,7 @@
         </div>
       </div>
 
-      <!-- Selector de Número de Comidas + Restricciones -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <!-- Comidas Diarias -->
         <div>
           <label for="numMeals" class="block text-sm font-medium text-cyan-700 mb-1">
             Comidas/día
@@ -146,7 +134,6 @@
           </select>
         </div>
 
-        <!-- Espacio de relleno estético (para mantener rejilla) -->
         <div class="hidden md:block">
           <p class="block text-sm font-medium text-cyan-700 mb-1">
             Menú del día
@@ -156,7 +143,6 @@
           </p>
         </div>
 
-        <!-- Filtros Dietéticos -->
         <div class="col-span-1">
           <label for="dietaryFilter" class="block text-sm font-medium text-cyan-700 mb-1">
             Restricciones dietéticas:
@@ -177,7 +163,6 @@
       </button>
     </div>
 
-    <!-- Sección "Qué tengo en la nevera" -->
     <div class="fridge-section p-6 rounded-xl mb-8">
       <h2 class="text-2xl font-semibold text-cyan-900 mb-3 flex items-center">
         <svg class="icon w-6 h-6 mr-2 text-cyan-700" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -204,19 +189,15 @@
       </button>
     </div>
 
-    <!-- Sección de Menús Generados -->
     <div id="generatedMenus" class="hidden">
       <h2 class="text-2xl font-semibold text-gray-700 mb-4" id="menusTitle">
         Menú de 1 día sugerido
       </h2>
-      <div id="menusContainer" class="space-y-8">
-        <!-- Los menús generados se mostrarán aquí -->
-      </div>
+      <div id="menusContainer" class="space-y-8"></div>
     </div>
   </div>
 
   <script>
-    // Referencias a elementos del DOM
     const targetProteinInput = document.getElementById('targetProtein');
     const targetFatInput = document.getElementById('targetFat');
     const targetCarbsInput = document.getElementById('targetCarbs');
@@ -230,10 +211,8 @@
     const numMealsSelector = document.getElementById('numMeals');
     const menusTitle = document.getElementById('menusTitle');
 
-    // Estado actual del plan
     let currentPlanData = null;
 
-    // Cálculo de calorías desde macros
     const calculateCalories = () => {
       const p = parseFloat(targetProteinInput.value) || 0;
       const f = parseFloat(targetFatInput.value) || 0;
@@ -248,17 +227,12 @@
 
     document.addEventListener('DOMContentLoaded', calculateCalories);
 
-    // Utilidad para alternar visibilidad de pasos de receta
     window.toggleRecipeDetails = function(id) {
       const element = document.getElementById(id);
       if (!element) return;
       element.classList.toggle('hidden');
     };
 
-    /**
-     * Llamada a Netlify + Gemini para generar un menú de 1 día.
-     * @param {boolean} useFridge Si debe usarse el texto de nevera.
-     */
     async function generateDailyPlanByAI(useFridge = false) {
       const pTarget = parseFloat(targetProteinInput.value) || 0;
       const fTarget = parseFloat(targetFatInput.value) || 0;
@@ -272,7 +246,6 @@
         return;
       }
 
-      // Placeholder de carga
       menusContainer.innerHTML = `
         <div class="text-center p-8 bg-white rounded-xl shadow-inner border border-cyan-300">
           <h3 class="text-xl font-semibold text-cyan-700">Calculando menú con IA...</h3>
@@ -327,36 +300,9 @@
       }
     }
 
-    /**
-     * Renderiza el menú devuelto por el backend.
-     * Estructura esperada:
-     * {
-     *   mode: "day",
-     *   plan_name: "...",
-     *   days: [
-     *     {
-     *       day_name: "Menú del día",
-     *       total_macros: { protein_g, fat_g, carbs_g },
-     *       meals: [
-     *         {
-     *           meal_type: "Desayuno",
-     *           recipe_name: "...",
-     *           short_description: "...",
-     *           macros: { protein_g, fat_g, carbs_g },
-     *           ingredients: [{ name, quantity_grams, notes }],
-     *           steps: ["...", "..."]
-     *         }
-     *       ]
-     *     }
-     *   ],
-     *   shopping_list: [...],
-     *   general_tips: [...]
-     * }
-     */
     function renderPlan(plan, pTarget, fTarget, cTarget) {
       const days = Array.isArray(plan.days) ? plan.days : [];
 
-      // Si no hay días, mostramos solo mensajes de texto (plan_name + general_tips)
       if (!days.length) {
         const tips = Array.isArray(plan.general_tips) ? plan.general_tips : [];
         const title = plan.plan_name || 'Plan no disponible';
@@ -392,7 +338,7 @@
               ${dayName}
             </h3>
             <p class="text-sm text-gray-500 mb-4">
-              Objetivo diario aproximado:
+              Macros totales estimados para este día:
               P: ${Math.round(tP)} g |
               G: ${Math.round(tF)} g |
               C: ${Math.round(tC)} g
@@ -470,7 +416,6 @@
         `;
       });
 
-      // Lista de la compra + tips (si existen)
       const shoppingList = Array.isArray(plan.shopping_list) ? plan.shopping_list : [];
       const tips = Array.isArray(plan.general_tips) ? plan.general_tips : [];
 
@@ -506,7 +451,6 @@
       menusContainer.innerHTML = html;
     }
 
-    // Listeners de botones principales
     generateMenusBtn.addEventListener('click', () => {
       generateDailyPlanByAI(false);
     });
@@ -517,5 +461,3 @@
   </script>
 </body>
 </html>
-
-
