@@ -854,7 +854,7 @@ exports.handler = async function (event, context) {
       plan_name: 'Menú de 1 día generado por Chef-Bot',
       days: [
         {
-          day_name: 'Día 1',
+          day_name: 'Menú del día',
           total_macros,
           meals
         }
@@ -1023,7 +1023,7 @@ Genera un único menú de 1 día que siga las reglas anteriores y el formato JSO
   );
 
   const dayNormalized = {
-    day_name: day0.day_name || 'Día 1',
+    day_name: day0.day_name || 'Menú del día',
     total_macros: {
       protein_g: total_macros.protein_g,
       fat_g: total_macros.fat_g,
@@ -1080,5 +1080,6 @@ Genera un único menú de 1 día que siga las reglas anteriores y el formato JSO
 
   return buildResponse(planFromAi, 'v3-chefbot-ai-ok');
 };
+
 
 
