@@ -1,62 +1,59 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Chef-Bot - Generador de Menús</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
-    body {
-      font-family: 'Inter', sans-serif;
-      background-color: #f3f4f6;
+    body{
+      font-family:'Inter',sans-serif;
+      background-color:#f3f4f6;
     }
-    .container {
-      max-width: 900px;
+    .container{max-width:900px;}
+    @keyframes fadeIn{
+      from{opacity:0;transform:translateY(10px);}
+      to{opacity:1;transform:translateY(0);}
     }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
+    .menu-item{animation:fadeIn .5s ease-out forwards;}
+    .bg-gradient-turquesa{
+      background-image:linear-gradient(to right,#00b8d4,#00a8c2);
     }
-    .menu-item {
-      animation: fadeIn 0.5s ease-out forwards;
+    .text-gradient-turquesa{
+      background-image:linear-gradient(to right,#00b8d4,#00a8c2);
+      -webkit-background-clip:text;
+      -webkit-text-fill-color:transparent;
     }
-    .bg-gradient-turquesa {
-      background-image: linear-gradient(to right, #00b8d4, #00a8c2);
+    .icon{
+      display:none;
+      width:1em;
+      height:1em;
+      stroke-width:2;
+      stroke:currentColor;
+      fill:none;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+      vertical-align:middle;
+      margin-right:.25rem;
     }
-    .text-gradient-turquesa {
-      background-image: linear-gradient(to right, #00b8d4, #00a8c2);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+    .fridge-section{
+      background-color:#e0f7fa;
+      border:2px dashed #00b8d4;
     }
-    .icon {
-      display: none;
-      width: 1em;
-      height: 1em;
-      stroke-width: 2;
-      stroke: currentColor;
-      fill: none;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-      vertical-align: middle;
-      margin-right: 0.25rem;
-    }
-    .fridge-section {
-      background-color: #e0f7fa;
-      border: 2px dashed #00b8d4;
-    }
-    .option-selector input[type="radio"]:checked + label {
-      background-color: #00b8d4;
-      color: white;
-      box-shadow: 0 4px 6px rgba(0, 184, 212, 0.3);
-      border-color: #00b8d4;
+    .option-selector input[type="radio"]:checked+label{
+      background-color:#00b8d4;
+      color:#fff;
+      box-shadow:0 4px 6px rgba(0,184,212,.3);
+      border-color:#00b8d4;
     }
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen flex items-center justify-center py-10 px-4">
   <div class="container mx-auto p-6 bg-white rounded-2xl shadow-xl border border-gray-200">
+    <!-- Título -->
     <div class="text-center mb-8">
       <h1 class="text-4xl font-bold">
         <span class="text-gradient-turquesa">Chef-Bot</span>
@@ -70,63 +67,42 @@
       </p>
     </div>
 
+    <!-- Sección de Objetivos y Filtros -->
     <div class="bg-cyan-50 p-6 rounded-xl mb-6 border border-cyan-200">
       <h2 class="text-2xl font-semibold text-cyan-800 mb-4">Mis Objetivos Diarios</h2>
 
+      <!-- Entrada de Macros y Calorías -->
       <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
         <div>
-          <label for="targetProtein" class="block text-sm font-medium text-cyan-700">
-            Proteína (g)
-          </label>
-          <input
-            type="number"
-            id="targetProtein"
-            placeholder="180"
-            value="180"
-            class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
+          <label for="targetProtein" class="block text-sm font-medium text-cyan-700">Proteína (g)</label>
+          <input type="number" id="targetProtein" placeholder="180" value="180"
+                 class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
         </div>
         <div>
-          <label for="targetFat" class="block text-sm font-medium text-cyan-700">
-            Grasas (g)
-          </label>
-          <input
-            type="number"
-            id="targetFat"
-            placeholder="80"
-            value="80"
-            class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
+          <label for="targetFat" class="block text-sm font-medium text-cyan-700">Grasas (g)</label>
+          <input type="number" id="targetFat" placeholder="80" value="80"
+                 class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
         </div>
         <div>
-          <label for="targetCarbs" class="block text-sm font-medium text-cyan-700">
-            Carbohidratos (g)
-          </label>
-          <input
-            type="number"
-            id="targetCarbs"
-            placeholder="250"
-            value="250"
-            class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
+          <label for="targetCarbs" class="block text-sm font-medium text-cyan-700">Carbohidratos (g)</label>
+          <input type="number" id="targetCarbs" placeholder="250" value="250"
+                 class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
         </div>
         <div>
-          <label class="block text-sm font-medium text-cyan-700">
-            Calorías (kcal)
-          </label>
-          <p
-            id="totalCalories"
-            class="mt-1 block w-full px-4 py-2 bg-cyan-100 font-bold text-lg text-cyan-800 rounded-lg shadow-inner border border-cyan-300">
-            2490
+          <label class="block text-sm font-medium text-cyan-700">Calorías (kcal)</label>
+          <p id="totalCalories"
+             class="mt-1 block w-full px-4 py-2 bg-cyan-100 font-bold text-lg text-cyan-800 rounded-lg shadow-inner border border-cyan-300">
+            2440
           </p>
         </div>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+      <!-- Selector nº comidas + restricciones -->
+      <div class="grid grid-cols-1 md-grid-cols-3 md:grid-cols-3 gap-6 mb-6">
         <div>
-          <label for="numMeals" class="block text-sm font-medium text-cyan-700 mb-1">
-            Comidas/día
-          </label>
-          <select
-            id="numMeals"
-            class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
+          <label for="numMeals" class="block text-sm font-medium text-cyan-700 mb-1">Comidas/día</label>
+          <select id="numMeals"
+                  class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
             <option value="1">1 comida</option>
             <option value="2">2 comidas</option>
             <option value="3" selected>3 comidas</option>
@@ -135,34 +111,27 @@
         </div>
 
         <div class="hidden md:block">
-          <p class="block text-sm font-medium text-cyan-700 mb-1">
-            Menú del día
-          </p>
+          <p class="block text-sm font-medium text-cyan-700 mb-1">Menú del día</p>
           <p class="mt-2 text-xs text-cyan-700/80">
             Chef-Bot genera un menú de 1 día completo. Puedes variar macros y nº de comidas para ver diferentes propuestas.
           </p>
         </div>
 
-        <div class="col-span-1">
-          <label for="dietaryFilter" class="block text-sm font-medium text-cyan-700 mb-1">
-            Restricciones dietéticas:
-          </label>
-          <input
-            type="text"
-            id="dietaryFilter"
-            value="Ninguna"
-            class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500"
-            placeholder="Ej.: sin gluten, intolerancia a la lactosa, alergia a frutos secos, huevo...">
+        <div>
+          <label for="dietaryFilter" class="block text-sm font-medium text-cyan-700 mb-1">Restricciones dietéticas:</label>
+          <input type="text" id="dietaryFilter" value="Ninguna"
+                 class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500"
+                 placeholder="Ej.: sin gluten, intolerancia a la lactosa, alergia a frutos secos, huevo...">
         </div>
       </div>
 
-      <button
-        id="generateMenusBtn"
-        class="w-full mt-3 px-6 py-3 border-4 border-white text-base font-medium rounded-xl text-white bg-gradient-turquesa hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 shadow-lg transition-transform transform hover:scale-[1.01] active:scale-100">
+      <button id="generateMenusBtn"
+              class="w-full mt-3 px-6 py-3 border-4 border-white text-base font-medium rounded-xl text-white bg-gradient-turquesa hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 shadow-lg transition-transform transform hover:scale-[1.01] active:scale-100">
         Generar menú de 1 día (ignorar nevera)
       </button>
     </div>
 
+    <!-- Sección “Qué tengo en la nevera” -->
     <div class="fridge-section p-6 rounded-xl mb-8">
       <h2 class="text-2xl font-semibold text-cyan-900 mb-3 flex items-center">
         <svg class="icon w-6 h-6 mr-2 text-cyan-700" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -174,21 +143,20 @@
         ¡Qué tengo en la nevera!
       </h2>
       <p class="text-sm text-cyan-700 mb-3">
-        Escribe los ingredientes que tienes disponibles (por ejemplo, pechuga de pollo, brócoli, pasta). Chef-Bot intentará priorizarlos en el menú, pero seguirá generando platos sencillos y mediterráneos.
+        Escribe los ingredientes que tienes disponibles (por ejemplo, pechuga de pollo, brócoli, pasta). Chef-Bot intentará priorizarlos en el menú,
+        pero seguirá generando platos sencillos y mediterráneos.
       </p>
-      <textarea
-        id="fridgeIngredients"
-        rows="2"
-        placeholder="Ej.: pechuga de pollo, brócoli, arroz, aguacate, leche..."
-        class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-400 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500"></textarea>
+      <textarea id="fridgeIngredients" rows="2"
+                placeholder="Ej.: pechuga de pollo, brócoli, arroz, aguacate, leche..."
+                class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-400 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500"></textarea>
 
-      <button
-        id="generateFridgeBtn"
-        class="w-full mt-4 px-6 py-3 border-4 border-white text-base font-medium rounded-xl text-white bg-gradient-turquesa hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 shadow-lg transition-transform transform hover:scale-[1.01] active:scale-100">
+      <button id="generateFridgeBtn"
+              class="w-full mt-4 px-6 py-3 border-4 border-white text-base font-medium rounded-xl text-white bg-gradient-turquesa hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 shadow-lg transition-transform transform hover:scale-[1.01] active:scale-100">
         Generar menú de 1 día ¡con mi nevera!
       </button>
     </div>
 
+    <!-- Menús generados -->
     <div id="generatedMenus" class="hidden">
       <h2 class="text-2xl font-semibold text-gray-700 mb-4" id="menusTitle">
         Menú de 1 día sugerido
@@ -227,21 +195,21 @@
 
     document.addEventListener('DOMContentLoaded', calculateCalories);
 
-    window.toggleRecipeDetails = function(id) {
+    window.toggleRecipeDetails = function(id){
       const element = document.getElementById(id);
-      if (!element) return;
+      if(!element) return;
       element.classList.toggle('hidden');
     };
 
-    async function generateDailyPlanByAI(useFridge = false) {
+    async function generateDailyPlanByAI(useFridge = false){
       const pTarget = parseFloat(targetProteinInput.value) || 0;
       const fTarget = parseFloat(targetFatInput.value) || 0;
       const cTarget = parseFloat(targetCarbsInput.value) || 0;
-      const numMeals = parseInt(numMealsSelector.value, 10) || 3;
+      const numMeals = parseInt(numMealsSelector.value,10) || 3;
       const dietaryFilter = dietaryFilterInput.value.trim();
       const fridgeText = useFridge ? fridgeIngredientsInput.value.trim() : '';
 
-      if (pTarget <= 0 || fTarget <= 0 || cTarget <= 0) {
+      if(pTarget <= 0 || fTarget <= 0 || cTarget <= 0){
         alert('Introduce macros válidos para proteína, grasas y carbohidratos.');
         return;
       }
@@ -269,25 +237,21 @@
         style: 'mediterranea'
       };
 
-      try {
-        const res = await fetch('/.netlify/functions/verifyMyth', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            mode: 'day',
-            payload
-          })
+      try{
+        const res = await fetch('/.netlify/functions/verifyMyth',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({mode:'day',payload})
         });
 
-        if (!res.ok) {
+        if(!res.ok){
           throw new Error(`Error en el servidor (${res.status}).`);
         }
 
         const data = await res.json();
         currentPlanData = data;
-
-        renderPlan(data, pTarget, fTarget, cTarget);
-      } catch (error) {
+        renderPlan(data,pTarget,fTarget,cTarget);
+      }catch(error){
         console.error(error);
         menusContainer.innerHTML = `
           <div class="text-center p-8 bg-white rounded-xl shadow-inner border border-red-200">
@@ -300,13 +264,12 @@
       }
     }
 
-    function renderPlan(plan, pTarget, fTarget, cTarget) {
+    function renderPlan(plan,pTarget,fTarget,cTarget){
       const days = Array.isArray(plan.days) ? plan.days : [];
 
-      if (!days.length) {
+      if(!days.length){
         const tips = Array.isArray(plan.general_tips) ? plan.general_tips : [];
         const title = plan.plan_name || 'Plan no disponible';
-
         menusContainer.innerHTML = `
           <div class="menu-item bg-white p-6 rounded-xl shadow-lg border border-yellow-200">
             <h3 class="text-2xl font-bold text-yellow-800 mb-3">${title}</h3>
@@ -324,30 +287,35 @@
 
       let html = '';
 
-      days.forEach((day, dayIndex) => {
+      days.forEach((day,dayIndex)=>{
         const meals = Array.isArray(day.meals) ? day.meals : [];
-        const dayName = day.day_name || `Día ${dayIndex + 1}`;
+        const dayName = day.day_name || `Día ${dayIndex+1}`;
         const tMacros = day.total_macros || {};
-        const tP = Number.isFinite(tMacros.protein_g) ? tMacros.protein_g : pTarget;
-        const tF = Number.isFinite(tMacros.fat_g) ? tMacros.fat_g : fTarget;
-        const tC = Number.isFinite(tMacros.carbs_g) ? tMacros.carbs_g : cTarget;
+        const dayP = Number.isFinite(tMacros.protein_g) ? tMacros.protein_g : null;
+        const dayF = Number.isFinite(tMacros.fat_g) ? tMacros.fat_g : null;
+        const dayC = Number.isFinite(tMacros.carbs_g) ? tMacros.carbs_g : null;
 
         html += `
           <div class="menu-item bg-white p-6 rounded-xl shadow-lg border border-gray-200">
-            <h3 class="text-3xl font-extrabold text-cyan-800 border-b-4 border-cyan-400 pb-2 mb-4">
+            <h3 class="text-3xl font-extrabold text-cyan-800 border-b-4 border-cyan-400 pb-2 mb-3">
               ${dayName}
             </h3>
-            <p class="text-sm text-gray-500 mb-4">
+            <p class="text-sm text-gray-600 mb-1">
               Macros totales estimados para este día:
-              P: ${Math.round(tP)} g |
-              G: ${Math.round(tF)} g |
-              C: ${Math.round(tC)} g
+              P: ${dayP !== null ? Math.round(dayP) : '–'} g |
+              G: ${dayF !== null ? Math.round(dayF) : '–'} g |
+              C: ${dayC !== null ? Math.round(dayC) : '–'} g
             </p>
-
+            <p class="text-xs text-gray-500 mb-4">
+              Objetivo que introdujiste:
+              P: ${Math.round(pTarget)} g |
+              G: ${Math.round(fTarget)} g |
+              C: ${Math.round(cTarget)} g
+            </p>
             <div class="space-y-4">
         `;
 
-        meals.forEach((meal, mealIndex) => {
+        meals.forEach((meal,mealIndex)=>{
           const mealIdBase = `${dayIndex}-${mealIndex}`;
           const mealType = meal.meal_type || 'Comida';
           const recipeName = meal.recipe_name || 'Plato sugerido por Chef-Bot';
@@ -360,19 +328,17 @@
           const steps = Array.isArray(meal.steps) ? meal.steps : [];
 
           const ingredientsHtml = ingredients.length
-            ? ingredients
-                .map(ing => {
-                  const grams = Number.isFinite(ing.quantity_grams)
-                    ? `${Math.round(ing.quantity_grams)} g`
-                    : '';
-                  const notes = ing.notes ? ` (${ing.notes})` : '';
-                  return `<li><span class="font-semibold">${grams}</span> ${ing.name}${notes}</li>`;
-                })
-                .join('')
+            ? ingredients.map(ing=>{
+                const grams = Number.isFinite(ing.quantity_grams)
+                  ? `${Math.round(ing.quantity_grams)} g`
+                  : '';
+                const notes = ing.notes ? ` (${ing.notes})` : '';
+                return `<li><span class="font-semibold">${grams}</span> ${ing.name}${notes}</li>`;
+              }).join('')
             : '<li>Ingredientes no especificados en detalle.</li>';
 
           const stepsHtml = steps.length
-            ? steps.map(step => `<li>${step}</li>`).join('')
+            ? steps.map(step=>`<li>${step}</li>`).join('')
             : '<li>La IA no ha detallado los pasos de elaboración para este plato.</li>';
 
           html += `
@@ -381,25 +347,16 @@
               <p class="text-xs text-green-600 mt-1">
                 Macros aproximados: P: ${mP.toFixed(1)} g | G: ${mF.toFixed(1)} g | C: ${mC.toFixed(1)} g
               </p>
-              ${
-                shortDesc
-                  ? `<p class="text-sm text-gray-600 mt-2">${shortDesc}</p>`
-                  : ''
-              }
-
+              ${shortDesc ? `<p class="text-sm text-gray-600 mt-2">${shortDesc}</p>` : ''}
               <h5 class="mt-3 text-sm font-semibold text-cyan-800">Ingredientes:</h5>
               <ul class="list-disc list-inside text-sm text-gray-700 ml-2 mt-1">
                 ${ingredientsHtml}
               </ul>
-
-              <button
-                type="button"
-                class="mt-3 text-xs px-3 py-1 rounded-lg text-white bg-gradient-turquesa hover:opacity-90 transition"
-                onclick="toggleRecipeDetails('recipe-steps-${mealIdBase}')"
-              >
+              <button type="button"
+                      class="mt-3 text-xs px-3 py-1 rounded-lg text-white bg-gradient-turquesa hover:opacity-90 transition"
+                      onclick="toggleRecipeDetails('recipe-steps-${mealIdBase}')">
                 Ver elaboración paso a paso
               </button>
-
               <div id="recipe-steps-${mealIdBase}" class="hidden mt-3">
                 <h5 class="text-sm font-semibold text-cyan-800">Elaboración paso a paso:</h5>
                 <ol class="list-decimal list-inside text-sm text-gray-700 ml-2 mt-1 space-y-2">
@@ -419,7 +376,7 @@
       const shoppingList = Array.isArray(plan.shopping_list) ? plan.shopping_list : [];
       const tips = Array.isArray(plan.general_tips) ? plan.general_tips : [];
 
-      if (shoppingList.length || tips.length) {
+      if(shoppingList.length || tips.length){
         html += `
           <div class="menu-item bg-white p-6 rounded-xl shadow-lg border border-gray-200">
             <h3 class="text-2xl font-bold text-cyan-800 mb-4">Resumen general</h3>
@@ -428,18 +385,17 @@
                 ? `
               <h4 class="text-lg font-semibold text-gray-700 mb-2">Lista de la compra sugerida:</h4>
               <ul class="list-disc list-inside text-sm text-gray-700 mb-4 ml-2">
-                ${shoppingList.map(item => `<li>${item}</li>`).join('')}
+                ${shoppingList.map(item=>`<li>${item}</li>`).join('')}
               </ul>
               `
                 : ''
             }
-
             ${
               tips.length
                 ? `
               <h4 class="text-lg font-semibold text-gray-700 mb-2">Consejos de Chef-Bot:</h4>
               <ul class="list-disc list-inside text-sm text-gray-700 ml-2 space-y-1">
-                ${tips.map(t => `<li>${t}</li>`).join('')}
+                ${tips.map(t=>`<li>${t}</li>`).join('')}
               </ul>
               `
                 : ''
@@ -451,13 +407,8 @@
       menusContainer.innerHTML = html;
     }
 
-    generateMenusBtn.addEventListener('click', () => {
-      generateDailyPlanByAI(false);
-    });
-
-    generateFridgeBtn.addEventListener('click', () => {
-      generateDailyPlanByAI(true);
-    });
+    generateMenusBtn.addEventListener('click',()=>generateDailyPlanByAI(false));
+    generateFridgeBtn.addEventListener('click',()=>generateDailyPlanByAI(true));
   </script>
 </body>
 </html>
