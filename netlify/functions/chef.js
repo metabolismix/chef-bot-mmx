@@ -1,189 +1,209 @@
-// netlify/functions/chef.js
-// Node runtime en Netlify. Sin dependencias externas (solo fetch).
-
-const MODEL = "gemini-2.5-flash";
-const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "Content-Type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Content-Type": "application/json; charset=utf-8",
-};
-
-function clampNumber(x, min, max, fallback) {
-  const n = Number(x);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(max, Math.max(min, n));
-}
-
-exports.handler = async (event) => {
-  try {
-    if (event.httpMethod === "OPTIONS") {
-      return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ ok: true }) };
-    }
-    if (event.httpMethod !== "POST") {
-      return { statusCode: 405, headers: corsHeaders, body: JSON.stringify({ error: "Method not allowed" }) };
-    }
-
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: "Falta GEMINI_API_KEY en variables de entorno de Netlify." }) };
-    }
-
-    const raw = JSON.parse(event.body || "{}");
-
-    // Ajustes defensivos (evita input loco y te protege coste)
-    const protein = clampNumber(raw.protein, 0, 400, 160);
-    const fat = clampNumber(raw.fat, 0, 200, 70);
-    const carbs = clampNumber(raw.carbs, 0, 600, 220);
-    const numMeals = clampNumber(raw.numMeals, 2, 5, 3);
-
-    const dietaryFilter = (raw.dietaryFilter || "").toString().slice(0, 120);
-    const fridgeIngredients = (raw.fridgeIngredients || "").toString().slice(0, 800);
-
-    const systemInstruction =
-      "Eres Chef-, un asistente de nutrición mediterránea experto y eficiente. " +
-      "Generas planes de alimentación estructurados en JSON de forma extremadamente concisa para ahorrar recursos. " +
-      "Recetas simples, ingredientes realistas, máximo 2 pasos por plato.";
-
-    const prompt =
-      `Plan mediterráneo de 1 día.\n` +
-      `Macros objetivo: Proteína ${protein}g, Grasas ${fat}g, Carbohidratos ${carbs}g.\n` +
-      `Número de comidas: ${numMeals}.\n` +
-      `Restricciones/estilo: ${dietaryFilter || "N/A"}.\n` +
-      `Ingredientes disponibles (nevera): ${fridgeIngredients || "N/A"}.\n\n` +
-      `INSTRUCCIONES DURAS:\n` +
-      `- Devuelve SOLO JSON válido.\n` +
-      `- Debe incluir exactamente ${numMeals} objetos en days[0].meals.\n` +
-      `- Cada plato: máximo 2 pasos.\n` +
-      `- Macros por plato coherentes (aprox) y total_macros del día informado.\n` +
-      `- shopping_list: lista corta y útil.\n` +
-      `- general_tips: 3-5 tips cortos.\n`;
-
-    // JSON Schema (para responseJsonSchema en Gemini API)
-    const responseJsonSchema = {
-      type: "object",
-      properties: {
-        plan_name: { type: "string" },
-        days: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              day_name: { type: "string" },
-              total_macros: {
-                type: "object",
-                properties: {
-                  protein_g: { type: "number" },
-                  fat_g: { type: "number" },
-                  carbs_g: { type: "number" }
-                },
-                required: ["protein_g", "fat_g", "carbs_g"]
-              },
-              meals: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    meal_type: { type: "string" },
-                    recipe_name: { type: "string" },
-                    short_description: { type: "string" },
-                    macros: {
-                      type: "object",
-                      properties: {
-                        protein_g: { type: "number" },
-                        fat_g: { type: "number" },
-                        carbs_g: { type: "number" }
-                      },
-                      required: ["protein_g", "fat_g", "carbs_g"]
-                    },
-                    ingredients: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          name: { type: "string" },
-                          quantity_grams: { type: "number" }
-                        },
-                        required: ["name", "quantity_grams"]
-                      }
-                    },
-                    steps: {
-                      type: "array",
-                      items: { type: "string" }
-                    }
-                  },
-                  required: ["meal_type", "recipe_name", "macros", "ingredients", "steps"]
-                }
-              }
-            },
-            required: ["day_name", "total_macros", "meals"]
-          }
-        },
-        shopping_list: { type: "array", items: { type: "string" } },
-        general_tips: { type: "array", items: { type: "string" } }
-      },
-      required: ["plan_name", "days", "shopping_list", "general_tips"]
-    };
-
-    const body = {
-      systemInstruction: { parts: [{ text: systemInstruction }] },
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseJsonSchema,
-        maxOutputTokens: 700,
-        temperature: 0.4
-      }
-    };
-
-    const resp = await fetch(GEMINI_ENDPOINT, {
-      method: "POST",
+export default async (req, context) => {
+  // --- Solo POST ---
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
       headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
       },
-      body: JSON.stringify(body)
+    });
+  }
+
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method Not Allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // --- API KEY (Netlify env) ---
+  const apiKey =
+    (globalThis?.Netlify?.env?.get && Netlify.env.get('GEMINI_API_KEY')) ||
+    process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    return new Response(JSON.stringify({ error: 'Missing GEMINI_API_KEY in Netlify env vars' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // --- Body size guard (barato y efectivo) ---
+  const raw = await req.text();
+  if (!raw || raw.length > 3500) {
+    return new Response(JSON.stringify({ error: 'Payload demasiado grande' }), {
+      status: 413,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  let body;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return new Response(JSON.stringify({ error: 'JSON inválido' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // --- Sanitización / clamps ---
+  const clampInt = (x, min, max, fallback) => {
+    const n = Number.isFinite(Number(x)) ? Math.round(Number(x)) : fallback;
+    return Math.max(min, Math.min(max, n));
+  };
+
+  const clampStr = (s, maxLen) => {
+    if (typeof s !== 'string') return '';
+    const trimmed = s.trim();
+    return trimmed.length > maxLen ? trimmed.slice(0, maxLen) : trimmed;
+  };
+
+  const prefs = {
+    protein: clampInt(body.protein, 40, 300, 160),
+    fat: clampInt(body.fat, 20, 200, 70),
+    carbs: clampInt(body.carbs, 0, 400, 220),
+    numMeals: clampInt(body.numMeals, 2, 5, 3),
+    dietaryFilter: clampStr(body.dietaryFilter, 120),
+    fridgeIngredients: clampStr(body.fridgeIngredients, 600),
+  };
+
+  const prompt = `
+Plan mediterráneo de 1 día.
+Objetivo macros total día: PROT=${prefs.protein}g, GRASA=${prefs.fat}g, CARB=${prefs.carbs}g.
+Número de comidas EXACTO: ${prefs.numMeals}.
+Restricciones: ${prefs.dietaryFilter || "N/A"}.
+Ingredientes disponibles (si aplica): ${prefs.fridgeIngredients || "N/A"}.
+
+INSTRUCCIONES:
+- Responde SOLO con JSON válido (sin markdown, sin texto extra).
+- Recetas simples y realistas.
+- Máximo 2 pasos por plato.
+- Incluye cantidades en gramos en ingredientes.
+- Ajusta macros aproximados por comida para que el total del día sea coherente.
+
+FORMATO JSON:
+{
+  "plan_name": string,
+  "days": [{
+    "day_name": string,
+    "total_macros": {"protein_g": number, "fat_g": number, "carbs_g": number},
+    "meals": [{
+      "meal_type": string,
+      "recipe_name": string,
+      "short_description": string,
+      "macros": {"protein_g": number, "fat_g": number, "carbs_g": number},
+      "ingredients": [{"name": string, "quantity_grams": number}],
+      "steps": [string, string]
+    }]
+  }],
+  "shopping_list": [string],
+  "general_tips": [string]
+}
+`.trim();
+
+  const systemInstruction = `
+Eres Chef-, un asistente de nutrición mediterránea experto y eficiente.
+Eres ultra-conciso y optimizas coste: salida breve, sin relleno, y JSON limpio.
+`.trim();
+
+  // --- Llamada a Gemini 2.5 Flash (REST) ---
+  // Endpoint y estructura de generateContent están documentados por Google. :contentReference[oaicite:5]{index=5}
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+
+  const payload = {
+    contents: [{ parts: [{ text: prompt }] }],
+    systemInstruction: { parts: [{ text: systemInstruction }] },
+    generationConfig: {
+      responseMimeType: 'application/json', // JSON mode :contentReference[oaicite:6]{index=6}
+      maxOutputTokens: 700,
+      temperature: 0.4,
+    },
+  };
+
+  let geminiJson;
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify(payload),
     });
 
-    const json = await resp.json();
+    geminiJson = await resp.json();
 
     if (!resp.ok) {
-      return {
-        statusCode: resp.status,
-        headers: corsHeaders,
-        body: JSON.stringify({
-          error: "Error desde Gemini API.",
-          details: json
-        })
-      };
+      const msg = geminiJson?.error?.message || 'Error llamando a Gemini';
+      return new Response(JSON.stringify({ error: msg }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
-
-    const usage = json.usageMetadata || null;
-    const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!text) {
-      return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: "Respuesta vacía o inválida del modelo.", details: json }) };
-    }
-
-    let plan;
-    try {
-      plan = JSON.parse(text);
-    } catch (e) {
-      return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: "El modelo no devolvió JSON parseable.", raw: text }) };
-    }
-
-    return {
-      statusCode: 200,
-      headers: corsHeaders,
-      body: JSON.stringify({ plan, usage })
-    };
   } catch (e) {
-    return {
-      statusCode: 500,
-      headers: corsHeaders,
-      body: JSON.stringify({ error: "Error interno en Netlify Function.", details: String(e?.message || e) })
-    };
+    return new Response(JSON.stringify({ error: 'Fallo de red hacia Gemini' }), {
+      status: 502,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
+
+  // --- Extraer texto ---
+  const text =
+    geminiJson?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('')?.trim() || '';
+
+  if (!text) {
+    return new Response(JSON.stringify({ error: 'Respuesta vacía de Gemini' }), {
+      status: 502,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // --- Parse JSON con salvavidas ---
+  const safeParse = (t) => {
+    try { return JSON.parse(t); } catch {}
+    const start = t.indexOf('{');
+    const end = t.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      const slice = t.slice(start, end + 1);
+      try { return JSON.parse(slice); } catch {}
+    }
+    return null;
+  };
+
+  const plan = safeParse(text);
+  if (!plan) {
+    return new Response(JSON.stringify({ error: 'Gemini devolvió JSON inválido' }), {
+      status: 502,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // --- Normalización mínima: 2 pasos máximo y nº comidas exacto ---
+  try {
+    const day0 = plan?.days?.[0];
+    if (day0?.meals?.length) {
+      // Ajustar nº de comidas exacto
+      day0.meals = day0.meals.slice(0, prefs.numMeals);
+
+      // Forzar 2 pasos máximo
+      day0.meals = day0.meals.map(m => ({
+        ...m,
+        steps: Array.isArray(m.steps) ? m.steps.slice(0, 2) : [],
+      }));
+    }
+  } catch {
+    // si falla, devolvemos igual; pero normalmente no falla
+  }
+
+  return new Response(JSON.stringify({ plan, usage: geminiJson?.usageMetadata || null }), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+      'Access-Control-Allow-Origin': '*',
+    },
+  });
 };
