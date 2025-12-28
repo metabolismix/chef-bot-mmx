@@ -1,414 +1,56 @@
-<!doctype html>
+
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Chef-Bot - Generador de Menús</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-  <style>
-    body{
-      font-family:'Inter',sans-serif;
-      background-color:#f3f4f6;
-    }
-    .container{max-width:900px;}
-    @keyframes fadeIn{
-      from{opacity:0;transform:translateY(10px);}
-      to{opacity:1;transform:translateY(0);}
-    }
-    .menu-item{animation:fadeIn .5s ease-out forwards;}
-    .bg-gradient-turquesa{
-      background-image:linear-gradient(to right,#00b8d4,#00a8c2);
-    }
-    .text-gradient-turquesa{
-      background-image:linear-gradient(to right,#00b8d4,#00a8c2);
-      -webkit-background-clip:text;
-      -webkit-text-fill-color:transparent;
-    }
-    .icon{
-      display:none;
-      width:1em;
-      height:1em;
-      stroke-width:2;
-      stroke:currentColor;
-      fill:none;
-      stroke-linecap:round;
-      stroke-linejoin:round;
-      vertical-align:middle;
-      margin-right:.25rem;
-    }
-    .fridge-section{
-      background-color:#e0f7fa;
-      border:2px dashed #00b8d4;
-    }
-    .option-selector input[type="radio"]:checked+label{
-      background-color:#00b8d4;
-      color:#fff;
-      box-shadow:0 4px 6px rgba(0,184,212,.3);
-      border-color:#00b8d4;
-    }
-  </style>
-</head>
-<body class="bg-gray-100 min-h-screen flex items-center justify-center py-10 px-4">
-  <div class="container mx-auto p-6 bg-white rounded-2xl shadow-xl border border-gray-200">
-    <!-- Título -->
-    <div class="text-center mb-8">
-      <h1 class="text-4xl font-bold">
-        <span class="text-gradient-turquesa">Chef-Bot</span>
-      </h1>
-      <p class="mt-2 text-lg text-gray-500">
-        Tu Chef IA personal: precisión en macros, seguridad en las restricciones y variedad en el plato.
-      </p>
-      <p class="mt-2 text-xs text-gray-400 max-w-xl mx-auto">
-        Este menú es orientativo y no sustituye el consejo de un profesional sanitario ni de un dietista-nutricionista.
-        Si tienes patologías, medicación crónica, TCA, embarazo u otras situaciones clínicas, consulta siempre con un profesional.
-      </p>
-    </div>
-
-    <!-- Sección de Objetivos y Filtros -->
-    <div class="bg-cyan-50 p-6 rounded-xl mb-6 border border-cyan-200">
-      <h2 class="text-2xl font-semibold text-cyan-800 mb-4">Mis Objetivos Diarios</h2>
-
-      <!-- Entrada de Macros y Calorías -->
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <div>
-          <label for="targetProtein" class="block text-sm font-medium text-cyan-700">Proteína (g)</label>
-          <input type="number" id="targetProtein" placeholder="180" value="180"
-                 class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
-        </div>
-        <div>
-          <label for="targetFat" class="block text-sm font-medium text-cyan-700">Grasas (g)</label>
-          <input type="number" id="targetFat" placeholder="80" value="80"
-                 class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
-        </div>
-        <div>
-          <label for="targetCarbs" class="block text-sm font-medium text-cyan-700">Carbohidratos (g)</label>
-          <input type="number" id="targetCarbs" placeholder="250" value="250"
-                 class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-cyan-700">Calorías (kcal)</label>
-          <p id="totalCalories"
-             class="mt-1 block w-full px-4 py-2 bg-cyan-100 font-bold text-lg text-cyan-800 rounded-lg shadow-inner border border-cyan-300">
-            2440
-          </p>
-        </div>
-      </div>
-
-      <!-- Selector nº comidas + restricciones -->
-      <div class="grid grid-cols-1 md-grid-cols-3 md:grid-cols-3 gap-6 mb-6">
-        <div>
-          <label for="numMeals" class="block text-sm font-medium text-cyan-700 mb-1">Comidas/día</label>
-          <select id="numMeals"
-                  class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
-            <option value="1">1 comida</option>
-            <option value="2">2 comidas</option>
-            <option value="3" selected>3 comidas</option>
-            <option value="4">4 comidas</option>
-          </select>
-        </div>
-
-        <div class="hidden md:block">
-          <p class="block text-sm font-medium text-cyan-700 mb-1">Menú del día</p>
-          <p class="mt-2 text-xs text-cyan-700/80">
-            Chef-Bot genera un menú de 1 día completo. Puedes variar macros y nº de comidas para ver diferentes propuestas.
-          </p>
-        </div>
-
-        <div>
-          <label for="dietaryFilter" class="block text-sm font-medium text-cyan-700 mb-1">Restricciones dietéticas:</label>
-          <input type="text" id="dietaryFilter" value="Ninguna"
-                 class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-300 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500"
-                 placeholder="Ej.: sin gluten, intolerancia a la lactosa, alergia a frutos secos, huevo...">
-        </div>
-      </div>
-
-      <button id="generateMenusBtn"
-              class="w-full mt-3 px-6 py-3 border-4 border-white text-base font-medium rounded-xl text-white bg-gradient-turquesa hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 shadow-lg transition-transform transform hover:scale-[1.01] active:scale-100">
-        Generar menú de 1 día (ignorar nevera)
-      </button>
-    </div>
-
-    <!-- Sección “Qué tengo en la nevera” -->
-    <div class="fridge-section p-6 rounded-xl mb-8">
-      <h2 class="text-2xl font-semibold text-cyan-900 mb-3 flex items-center">
-        <svg class="icon w-6 h-6 mr-2 text-cyan-700" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path>
-          <path d="M17 17H7"></path>
-          <path d="M17 13H7"></path>
-          <path d="M10 9H7"></path>
-        </svg>
-        ¡Qué tengo en la nevera!
-      </h2>
-      <p class="text-sm text-cyan-700 mb-3">
-        Escribe los ingredientes que tienes disponibles (por ejemplo, pechuga de pollo, brócoli, pasta). Chef-Bot intentará priorizarlos en el menú,
-        pero seguirá generando platos sencillos y mediterráneos.
-      </p>
-      <textarea id="fridgeIngredients" rows="2"
-                placeholder="Ej.: pechuga de pollo, brócoli, arroz, aguacate, leche..."
-                class="mt-1 block w-full px-4 py-2 bg-white border border-cyan-400 rounded-lg shadow-sm focus:outline-none focus:ring-cyan-500 focus:border-cyan-500"></textarea>
-
-      <button id="generateFridgeBtn"
-              class="w-full mt-4 px-6 py-3 border-4 border-white text-base font-medium rounded-xl text-white bg-gradient-turquesa hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 shadow-lg transition-transform transform hover:scale-[1.01] active:scale-100">
-        Generar menú de 1 día ¡con mi nevera!
-      </button>
-    </div>
-
-    <!-- Menús generados -->
-    <div id="generatedMenus" class="hidden">
-      <h2 class="text-2xl font-semibold text-gray-700 mb-4" id="menusTitle">
-        Menú de 1 día sugerido
-      </h2>
-      <div id="menusContainer" class="space-y-8"></div>
-    </div>
-  </div>
-
-  <script>
-    const targetProteinInput = document.getElementById('targetProtein');
-    const targetFatInput = document.getElementById('targetFat');
-    const targetCarbsInput = document.getElementById('targetCarbs');
-    const totalCaloriesElement = document.getElementById('totalCalories');
-    const generateMenusBtn = document.getElementById('generateMenusBtn');
-    const generateFridgeBtn = document.getElementById('generateFridgeBtn');
-    const fridgeIngredientsInput = document.getElementById('fridgeIngredients');
-    const generatedMenusSection = document.getElementById('generatedMenus');
-    const menusContainer = document.getElementById('menusContainer');
-    const dietaryFilterInput = document.getElementById('dietaryFilter');
-    const numMealsSelector = document.getElementById('numMeals');
-    const menusTitle = document.getElementById('menusTitle');
-
-    let currentPlanData = null;
-
-    const calculateCalories = () => {
-      const p = parseFloat(targetProteinInput.value) || 0;
-      const f = parseFloat(targetFatInput.value) || 0;
-      const c = parseFloat(targetCarbsInput.value) || 0;
-      const calories = (p * 4) + (c * 4) + (f * 9);
-      totalCaloriesElement.textContent = Math.round(calories).toLocaleString('es-ES');
-    };
-
-    [targetProteinInput, targetFatInput, targetCarbsInput].forEach(input => {
-      input.addEventListener('input', calculateCalories);
-    });
-
-    document.addEventListener('DOMContentLoaded', calculateCalories);
-
-    window.toggleRecipeDetails = function(id){
-      const element = document.getElementById(id);
-      if(!element) return;
-      element.classList.toggle('hidden');
-    };
-
-    async function generateDailyPlanByAI(useFridge = false){
-      const pTarget = parseFloat(targetProteinInput.value) || 0;
-      const fTarget = parseFloat(targetFatInput.value) || 0;
-      const cTarget = parseFloat(targetCarbsInput.value) || 0;
-      const numMeals = parseInt(numMealsSelector.value,10) || 3;
-      const dietaryFilter = dietaryFilterInput.value.trim();
-      const fridgeText = useFridge ? fridgeIngredientsInput.value.trim() : '';
-
-      if(pTarget <= 0 || fTarget <= 0 || cTarget <= 0){
-        alert('Introduce macros válidos para proteína, grasas y carbohidratos.');
-        return;
-      }
-
-      menusContainer.innerHTML = `
-        <div class="text-center p-8 bg-white rounded-xl shadow-inner border border-cyan-300">
-          <h3 class="text-xl font-semibold text-cyan-700">Calculando menú con IA...</h3>
-          <p class="mt-2 text-gray-500 animate-pulse">
-            Chef-Bot está diseñando 1 día completo con ${numMeals} comidas, ajustando tus macros, restricciones y estilo mediterráneo.
-          </p>
-        </div>
-      `;
-      generatedMenusSection.classList.remove('hidden');
-      menusTitle.textContent = 'Menú de 1 día sugerido';
-
-      const payload = {
-        dailyMacros: {
-          protein_g: pTarget,
-          fat_g: fTarget,
-          carbs_g: cTarget
-        },
-        numMeals,
-        dietaryFilter,
-        fridgeIngredients: fridgeText,
-        style: 'mediterranea'
-      };
-
-      try{
-        const res = await fetch('/.netlify/functions/verifyMyth',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({mode:'day',payload})
-        });
-
-        if(!res.ok){
-          throw new Error(`Error en el servidor (${res.status}).`);
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chef-</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .bg-mmx-gradient {
+            background: linear-gradient(135deg, #00BCC9 0%, #0088A3 100%);
         }
+        .text-mmx-gradient {
+            background: linear-gradient(135deg, #00BCC9 0%, #0088A3 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        /* Colores exactos de la paleta solicitada */
+        .text-macro-protein { color: #20C29E; } 
+        .text-macro-fat { color: #8C44F7; }     
+        .text-macro-carb { color: #00A3FF; }     
+        
+        .bg-macro-protein { background-color: #20C29E; }
+        .bg-macro-fat { background-color: #8C44F7; }
+        .bg-macro-carb { background-color: #00A3FF; }
 
-        const data = await res.json();
-        currentPlanData = data;
-        renderPlan(data,pTarget,fTarget,cTarget);
-      }catch(error){
-        console.error(error);
-        menusContainer.innerHTML = `
-          <div class="text-center p-8 bg-white rounded-xl shadow-inner border border-red-200">
-            <h3 class="text-xl font-semibold text-red-600">No se ha podido generar el menú con IA</h3>
-            <p class="mt-2 text-red-500">
-              Inténtalo de nuevo en unos minutos. Si el problema persiste, revisa la configuración de la API en Netlify o contáctanos.
-            </p>
-          </div>
-        `;
-      }
-    }
-
-    function renderPlan(plan,pTarget,fTarget,cTarget){
-      const days = Array.isArray(plan.days) ? plan.days : [];
-
-      if(!days.length){
-        const tips = Array.isArray(plan.general_tips) ? plan.general_tips : [];
-        const title = plan.plan_name || 'Plan no disponible';
-        menusContainer.innerHTML = `
-          <div class="menu-item bg-white p-6 rounded-xl shadow-lg border border-yellow-200">
-            <h3 class="text-2xl font-bold text-yellow-800 mb-3">${title}</h3>
-            ${
-              tips.length
-                ? `<ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
-                    ${tips.map(t => `<li>${t}</li>`).join('')}
-                  </ul>`
-                : '<p class="text-sm text-gray-600">No se ha podido generar un menú estructurado en esta ocasión.</p>'
-            }
-          </div>
-        `;
-        return;
-      }
-
-      let html = '';
-
-      days.forEach((day,dayIndex)=>{
-        const meals = Array.isArray(day.meals) ? day.meals : [];
-        const dayName = day.day_name || `Día ${dayIndex+1}`;
-        const tMacros = day.total_macros || {};
-        const dayP = Number.isFinite(tMacros.protein_g) ? tMacros.protein_g : null;
-        const dayF = Number.isFinite(tMacros.fat_g) ? tMacros.fat_g : null;
-        const dayC = Number.isFinite(tMacros.carbs_g) ? tMacros.carbs_g : null;
-
-        html += `
-          <div class="menu-item bg-white p-6 rounded-xl shadow-lg border border-gray-200">
-            <h3 class="text-3xl font-extrabold text-cyan-800 border-b-4 border-cyan-400 pb-2 mb-3">
-              ${dayName}
-            </h3>
-            <p class="text-sm text-gray-600 mb-1">
-              Macros totales estimados para este día:
-              P: ${dayP !== null ? Math.round(dayP) : '–'} g |
-              G: ${dayF !== null ? Math.round(dayF) : '–'} g |
-              C: ${dayC !== null ? Math.round(dayC) : '–'} g
-            </p>
-            <p class="text-xs text-gray-500 mb-4">
-              Objetivo que introdujiste:
-              P: ${Math.round(pTarget)} g |
-              G: ${Math.round(fTarget)} g |
-              C: ${Math.round(cTarget)} g
-            </p>
-            <div class="space-y-4">
-        `;
-
-        meals.forEach((meal,mealIndex)=>{
-          const mealIdBase = `${dayIndex}-${mealIndex}`;
-          const mealType = meal.meal_type || 'Comida';
-          const recipeName = meal.recipe_name || 'Plato sugerido por Chef-Bot';
-          const shortDesc = meal.short_description || '';
-          const macros = meal.macros || {};
-          const mP = Number.isFinite(macros.protein_g) ? macros.protein_g : 0;
-          const mF = Number.isFinite(macros.fat_g) ? macros.fat_g : 0;
-          const mC = Number.isFinite(macros.carbs_g) ? macros.carbs_g : 0;
-          const ingredients = Array.isArray(meal.ingredients) ? meal.ingredients : [];
-          const steps = Array.isArray(meal.steps) ? meal.steps : [];
-
-          const ingredientsHtml = ingredients.length
-            ? ingredients.map(ing=>{
-                const grams = Number.isFinite(ing.quantity_grams)
-                  ? `${Math.round(ing.quantity_grams)} g`
-                  : '';
-                const notes = ing.notes ? ` (${ing.notes})` : '';
-                return `<li><span class="font-semibold">${grams}</span> ${ing.name}${notes}</li>`;
-              }).join('')
-            : '<li>Ingredientes no especificados en detalle.</li>';
-
-          const stepsHtml = steps.length
-            ? steps.map(step=>`<li>${step}</li>`).join('')
-            : '<li>La IA no ha detallado los pasos de elaboración para este plato.</li>';
-
-          html += `
-            <div class="p-4 rounded-lg bg-gray-50 border border-gray-200">
-              <h4 class="text-xl font-semibold text-gray-700">${mealType}: ${recipeName}</h4>
-              <p class="text-xs text-green-600 mt-1">
-                Macros aproximados: P: ${mP.toFixed(1)} g | G: ${mF.toFixed(1)} g | C: ${mC.toFixed(1)} g
-              </p>
-              ${shortDesc ? `<p class="text-sm text-gray-600 mt-2">${shortDesc}</p>` : ''}
-              <h5 class="mt-3 text-sm font-semibold text-cyan-800">Ingredientes:</h5>
-              <ul class="list-disc list-inside text-sm text-gray-700 ml-2 mt-1">
-                ${ingredientsHtml}
-              </ul>
-              <button type="button"
-                      class="mt-3 text-xs px-3 py-1 rounded-lg text-white bg-gradient-turquesa hover:opacity-90 transition"
-                      onclick="toggleRecipeDetails('recipe-steps-${mealIdBase}')">
-                Ver elaboración paso a paso
-              </button>
-              <div id="recipe-steps-${mealIdBase}" class="hidden mt-3">
-                <h5 class="text-sm font-semibold text-cyan-800">Elaboración paso a paso:</h5>
-                <ol class="list-decimal list-inside text-sm text-gray-700 ml-2 mt-1 space-y-2">
-                  ${stepsHtml}
-                </ol>
-              </div>
-            </div>
-          `;
-        });
-
-        html += `
-            </div>
-          </div>
-        `;
-      });
-
-      const shoppingList = Array.isArray(plan.shopping_list) ? plan.shopping_list : [];
-      const tips = Array.isArray(plan.general_tips) ? plan.general_tips : [];
-
-      if(shoppingList.length || tips.length){
-        html += `
-          <div class="menu-item bg-white p-6 rounded-xl shadow-lg border border-gray-200">
-            <h3 class="text-2xl font-bold text-cyan-800 mb-4">Resumen general</h3>
-            ${
-              shoppingList.length
-                ? `
-              <h4 class="text-lg font-semibold text-gray-700 mb-2">Lista de la compra sugerida:</h4>
-              <ul class="list-disc list-inside text-sm text-gray-700 mb-4 ml-2">
-                ${shoppingList.map(item=>`<li>${item}</li>`).join('')}
-              </ul>
-              `
-                : ''
-            }
-            ${
-              tips.length
-                ? `
-              <h4 class="text-lg font-semibold text-gray-700 mb-2">Consejos de Chef-Bot:</h4>
-              <ul class="list-disc list-inside text-sm text-gray-700 ml-2 space-y-1">
-                ${tips.map(t=>`<li>${t}</li>`).join('')}
-              </ul>
-              `
-                : ''
-            }
-          </div>
-        `;
-      }
-
-      menusContainer.innerHTML = html;
-    }
-
-    generateMenusBtn.addEventListener('click',()=>generateDailyPlanByAI(false));
-    generateFridgeBtn.addEventListener('click',()=>generateDailyPlanByAI(true));
-  </script>
+        .animate-spin-slow {
+          animation: spin 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@19.0.0",
+    "react-dom": "https://esm.sh/react-dom@19.0.0",
+    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+    "@google/genai": "https://esm.sh/@google/genai@0.2.1",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/"
+  }
+}
+</script>
+</head>
+<body class="bg-[#f4f7f9] min-h-screen text-gray-900 overflow-x-hidden">
+    <div id="root"></div>
+    <script type="module" src="verifymyth.js"></script>
 </body>
 </html>
