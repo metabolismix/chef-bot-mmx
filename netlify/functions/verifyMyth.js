@@ -1,40 +1,29 @@
-import React, { useMemo, useState } from "react";
-import { createRoot } from "react-dom/client";
+import React, { useState } from 'react';
+import ReactDOM from 'react-dom/client';
 
-// =======================
-// CONFIG
-// =======================
-const API_ENDPOINT = "/.netlify/functions/chef"; // Netlify Functions default path
-
-// =======================
-// API CLIENT (Frontend)
-// =======================
-async function generateMealPlan(prefs) {
-  const res = await fetch(API_ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+// --- LLAMADA AL BACKEND (NETLIFY FUNCTION) ---
+const generateMealPlan = async (prefs) => {
+  const res = await fetch('/.netlify/functions/chef', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(prefs),
   });
 
-  const data = await res.json().catch(() => ({}));
+  const data = await res.json().catch(() => null);
+
   if (!res.ok) {
-    const msg = data?.error || "Error desconocido en el servidor.";
+    const msg = data?.error || `Error ${res.status}`;
     throw new Error(msg);
   }
 
-  // Esperado: { plan: {...}, usage: {...} }
-  return data;
-}
+  return data; // { plan, usage }
+};
 
-// =======================
-// UI COMPONENTS
-// =======================
+// --- COMPONENTES ---
 const Alert = ({ message, onClose }) => (
-  <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl flex items-start justify-between shadow-sm animate-in fade-in">
+  <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl flex items-start justify-between shadow-sm animate-in fade-in duration-300">
     <p className="text-sm text-red-700 font-medium">{message}</p>
-    <button onClick={onClose} className="text-red-400 hover:text-red-500" aria-label="Cerrar">
-      &times;
-    </button>
+    <button onClick={onClose} className="text-red-400 hover:text-red-500">&times;</button>
   </div>
 );
 
@@ -57,7 +46,7 @@ const MacroBadge = ({ label, value, unit, colorClass, barClass }) => (
       <span className="text-[9px] font-bold text-gray-400">{unit}</span>
     </div>
     <div className="w-6 h-1 mt-2 rounded-full bg-gray-200 overflow-hidden">
-      <div className={`h-full ${barClass}`} style={{ width: "100%" }}></div>
+      <div className={`h-full ${barClass}`} style={{ width: '100%' }}></div>
     </div>
   </div>
 );
@@ -78,14 +67,11 @@ const MealCard = ({ meal }) => {
             <p className="text-xs text-gray-500 font-medium mt-1">{meal.short_description}</p>
           ) : null}
         </div>
-
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className={`px-5 py-2 rounded-xl font-black text-[10px] transition-all ${
-            isOpen ? "bg-[#003d5b] text-white" : "bg-gray-100 text-[#003d5b]"
-          }`}
+          className={`px-5 py-2 rounded-xl font-black text-[10px] transition-all ${isOpen ? 'bg-[#003d5b] text-white' : 'bg-gray-100 text-[#003d5b]'}`}
         >
-          {isOpen ? "CERRAR" : "VER RECETA"}
+          {isOpen ? 'CERRAR' : 'VER RECETA'}
         </button>
       </div>
 
@@ -97,7 +83,7 @@ const MealCard = ({ meal }) => {
       </div>
 
       {isOpen && (
-        <div className="mt-6 pt-6 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-top-2">
+        <div className="mt-6 pt-6 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-top-2 duration-300">
           <div>
             <h5 className="text-[10px] font-black text-[#003d5b] uppercase mb-3">Ingredientes</h5>
             <ul className="space-y-1">
@@ -109,7 +95,6 @@ const MealCard = ({ meal }) => {
               ))}
             </ul>
           </div>
-
           <div>
             <h5 className="text-[10px] font-black text-[#003d5b] uppercase mb-3">Preparación</h5>
             {meal.steps.map((step, i) => (
@@ -124,27 +109,30 @@ const MealCard = ({ meal }) => {
   );
 };
 
-const Input = ({ label, name, value, color, onChange }) => (
+// --- INPUTS ---
+const Input = ({ label, name, value, color, onChange, min=0, max=500 }) => (
   <div className="flex flex-col">
     <label className="text-[9px] font-black text-gray-400 mb-1">{label}</label>
     <input
       type="number"
       name={name}
       value={value}
+      min={min}
+      max={max}
       onChange={onChange}
-      min="0"
       className={`w-full p-2 bg-gray-50 border-2 border-gray-100 rounded-xl font-black text-sm focus:border-[#00BCC9] outline-none ${color}`}
     />
   </div>
 );
 
-const TextInput = ({ label, name, value, placeholder, onChange }) => (
+const TextInput = ({ label, name, value, placeholder, onChange, maxLength=120 }) => (
   <div className="flex flex-col">
     <label className="text-[9px] font-black text-gray-400 mb-1">{label}</label>
     <input
       type="text"
       name={name}
       value={value}
+      maxLength={maxLength}
       placeholder={placeholder}
       onChange={onChange}
       className="w-full p-2 bg-gray-50 border-2 border-gray-100 rounded-xl font-bold text-xs focus:border-[#00BCC9] outline-none"
@@ -161,26 +149,20 @@ const Select = ({ label, name, value, onChange }) => (
       onChange={onChange}
       className="w-full p-2 bg-gray-50 border-2 border-gray-100 rounded-xl font-bold text-xs focus:border-[#00BCC9] outline-none"
     >
-      {[2, 3, 4, 5].map((n) => (
-        <option key={n} value={n}>
-          {n} platos
-        </option>
-      ))}
+      {[2, 3, 4, 5].map(n => <option key={n} value={n}>{n} platos</option>)}
     </select>
   </div>
 );
 
-// =======================
-// APP
-// =======================
+// --- APP PRINCIPAL ---
 const App = () => {
   const [prefs, setPrefs] = useState({
     protein: 160,
     fat: 70,
     carbs: 220,
     numMeals: 3,
-    dietaryFilter: "",
-    fridgeIngredients: "",
+    dietaryFilter: '',
+    fridgeIngredients: '',
   });
 
   const [loading, setLoading] = useState(false);
@@ -188,34 +170,26 @@ const App = () => {
   const [plan, setPlan] = useState(null);
   const [usage, setUsage] = useState(null);
 
-  const calories = useMemo(
-    () => Math.round(prefs.protein * 4 + prefs.carbs * 4 + prefs.fat * 9),
-    [prefs]
-  );
+  const calories = Math.round((prefs.protein * 4) + (prefs.carbs * 4) + (prefs.fat * 9));
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setPrefs((prev) => ({
+    setPrefs(prev => ({
       ...prev,
-      [name]: name === "dietaryFilter" || name === "fridgeIngredients" ? value : Number(value),
+      [name]: (name === 'dietaryFilter' || name === 'fridgeIngredients') ? value : Number(value),
     }));
   };
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (useFridge) => {
     setLoading(true);
     setError(null);
-    setPlan(null);
-    setUsage(null);
-
     try {
-      // Validación mínima client-side
-      if ([prefs.protein, prefs.fat, prefs.carbs].some((x) => Number.isNaN(x) || x < 0)) {
-        throw new Error("Revisa tus macros: no pueden ser negativos.");
-      }
-
-      const result = await generateMealPlan({ ...prefs });
+      const result = await generateMealPlan({
+        ...prefs,
+        fridgeIngredients: useFridge ? prefs.fridgeIngredients : '',
+      });
       setPlan(result.plan);
-      setUsage(result.usage);
+      setUsage(result.usage || null);
     } catch (err) {
       setError(err?.message || "Fallo en la conexión con Chef-. Intenta de nuevo.");
     } finally {
@@ -238,9 +212,9 @@ const App = () => {
             </h2>
 
             <div className="grid grid-cols-3 gap-3">
-              <Input label="PROT" name="protein" value={prefs.protein} color="text-macro-protein" onChange={handleInputChange} />
-              <Input label="FAT" name="fat" value={prefs.fat} color="text-macro-fat" onChange={handleInputChange} />
-              <Input label="CARB" name="carbs" value={prefs.carbs} color="text-macro-carb" onChange={handleInputChange} />
+              <Input label="PROT" name="protein" value={prefs.protein} color="text-macro-protein" onChange={handleInputChange} min={40} max={300}/>
+              <Input label="FAT" name="fat" value={prefs.fat} color="text-macro-fat" onChange={handleInputChange} min={20} max={200}/>
+              <Input label="CARB" name="carbs" value={prefs.carbs} color="text-macro-carb" onChange={handleInputChange} min={0} max={400}/>
             </div>
 
             <div className="bg-gray-50 p-3 rounded-xl flex justify-between items-center">
@@ -256,7 +230,7 @@ const App = () => {
 
             <div className="grid grid-cols-2 gap-4">
               <Select label="PLATOS" name="numMeals" value={prefs.numMeals} onChange={handleInputChange} />
-              <TextInput label="DIETA" name="dietaryFilter" value={prefs.dietaryFilter} placeholder="Ej: Vegano" onChange={handleInputChange} />
+              <TextInput label="DIETA" name="dietaryFilter" value={prefs.dietaryFilter} placeholder="Ej: Vegano" onChange={handleInputChange} maxLength={120}/>
             </div>
 
             <textarea
@@ -264,13 +238,14 @@ const App = () => {
               value={prefs.fridgeIngredients}
               onChange={handleInputChange}
               placeholder="Ingredientes en mi nevera..."
+              maxLength={600}
               className="w-full p-3 bg-gray-50 border-2 border-dashed border-gray-100 rounded-xl text-xs font-medium focus:border-[#00BCC9] outline-none h-16 resize-none"
             />
           </div>
         </div>
 
         <button
-          onClick={handleGenerate}
+          onClick={() => handleGenerate(true)}
           disabled={loading}
           className="w-full py-4 bg-mmx-gradient text-white font-black rounded-2xl shadow-lg hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-50"
         >
@@ -279,46 +254,34 @@ const App = () => {
 
         {error && <Alert message={error} onClose={() => setError(null)} />}
 
-        {usage && (
+        {usage?.totalTokenCount != null && (
           <div className="flex justify-center gap-4 text-[9px] font-black text-gray-400 uppercase tracking-tighter">
-            <span>Tokens: {usage?.totalTokenCount ?? "?"}</span>
-            <span>Modelo: 2.5 Flash</span>
+            <span>Tokens: {usage.totalTokenCount}</span>
+            <span>Model: 2.5 Flash</span>
           </div>
         )}
 
         {plan && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
             <h2 className="text-2xl font-black text-center text-[#003d5b] mt-10">{plan.plan_name}</h2>
 
             <div className="space-y-4">
-              {plan?.days?.[0]?.meals?.map((meal, i) => (
-                <MealCard key={i} meal={meal} />
-              ))}
+              {plan.days?.[0]?.meals?.map((meal, i) => <MealCard key={i} meal={meal} />)}
             </div>
 
-            <div className="bg-[#003d5b] p-8 rounded-[2rem] text-white">
-              <h4 className="text-lg font-black mb-4 flex justify-between items-center">
-                Lista de Compra
-                <span className="text-[9px] opacity-50">FLASH OPTIMIZED</span>
-              </h4>
-
-              <div className="grid grid-cols-2 gap-3">
-                {(plan.shopping_list || []).map((item, i) => (
-                  <div key={i} className="text-xs font-medium bg-white/10 p-2 rounded-lg">{item}</div>
-                ))}
-              </div>
-
-              {(plan.general_tips && plan.general_tips.length > 0) ? (
-                <div className="mt-6 pt-6 border-t border-white/10">
-                  <h5 className="text-[10px] font-black uppercase opacity-80 mb-3">Tips</h5>
-                  <ul className="space-y-2">
-                    {plan.general_tips.map((t, i) => (
-                      <li key={i} className="text-xs opacity-90">• {t}</li>
-                    ))}
-                  </ul>
+            {!!plan.shopping_list?.length && (
+              <div className="bg-[#003d5b] p-8 rounded-[2rem] text-white">
+                <h4 className="text-lg font-black mb-4 flex justify-between items-center">
+                  Lista de Compra
+                  <span className="text-[9px] opacity-50">FLASH OPTIMIZED</span>
+                </h4>
+                <div className="grid grid-cols-2 gap-3">
+                  {plan.shopping_list.map((item, i) => (
+                    <div key={i} className="text-xs font-medium bg-white/10 p-2 rounded-lg">{item}</div>
+                  ))}
                 </div>
-              ) : null}
-            </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -328,4 +291,5 @@ const App = () => {
   );
 };
 
-createRoot(document.getElementById("root")).render(<App />);
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
