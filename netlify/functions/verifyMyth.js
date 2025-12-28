@@ -1,1472 +1,333 @@
-// netlify/functions/verifyMyth.js
 
-exports.handler = async function (event, context) {
-  const cors = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS"
-  };
+import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom/client';
+import { GoogleGenAI, Type } from "@google/genai";
 
-  // ---------- CORS / MÉTODO ----------
-  if (event.httpMethod === "OPTIONS") {
-    return { statusCode: 204, headers: cors, body: "" };
-  }
-  if (event.httpMethod !== "POST") {
-    return {
-      statusCode: 405,
-      headers: { ...cors, "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "Method Not Allowed. Use POST." })
-    };
-  }
+// --- SERVICIO GEMINI ---
 
-  // ---------- UTILIDADES BÁSICAS ----------
-  const CONTACT_URL = "https://metabolismix.com/contacto/";
+const generateMealPlan = async (prefs) => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const model = "gemini-flash-lite-latest";
 
-  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+  const prompt = `Plan mediterráneo 1 día: Prot:${prefs.protein}g, Gras:${prefs.fat}g, Carb:${prefs.carbs}g. ${prefs.numMeals} comidas. Restricciones: ${prefs.dietaryFilter || "N/A"}. Nevera: ${prefs.fridgeIngredients || "N/A"}. 
+  INSTRUCCIÓN: Sé ultra-conciso. Recetas simples. Máximo 2 pasos por plato. El JSON debe ser válido.`;
 
-  const safeNumber = (v, def) => {
-    const n = Number(v);
-    return Number.isFinite(n) && n > 0 ? n : def;
-  };
-
-  const baseNutritionTips = () => [
-    "Este menú es orientativo y no sustituye el consejo de un profesional sanitario ni de un dietista-nutricionista.",
-    "Si tienes patologías, medicación crónica, TCA, embarazo u otras situaciones clínicas, consulta siempre con un profesional antes de seguir cualquier pauta alimentaria.",
-    "Las cantidades, macros y raciones son aproximadas y deben adaptarse a tu contexto, tolerancias digestivas y sensación de hambre/saciedad.",
-    "Si tienes dudas sobre cómo adaptar este menú a tu caso, puedes escribirnos desde " +
-      `<a href="${CONTACT_URL}" target="_blank" rel="noopener noreferrer">${CONTACT_URL}</a>.`
-  ];
-
-  const normalizeFridgeTokens = (text) => {
-    if (!text || typeof text !== "string") return [];
-    return text
-      .toLowerCase()
-      .split(/[^a-záéíóúüñ]+/i)
-      .map((t) => t.trim())
-      .filter(Boolean);
-  };
-
-  const hasToken = (tokens, fragment) =>
-    tokens.some((t) => t.includes(fragment));
-
-  const chooseRandom = (arr) =>
-    Array.isArray(arr) && arr.length
-      ? arr[Math.floor(Math.random() * arr.length)]
-      : null;
-
-  const stripFences = (t) => {
-    if (!t || typeof t !== "string") return "";
-    let x = t.trim();
-    if (x.startsWith("```")) {
-      x = x.replace(/^```(?:json)?\s*/i, "").replace(/```$/, "");
-    }
-    return x.trim();
-  };
-
-  const robustParseJSON = (text) => {
-    if (!text || typeof text !== "string") return null;
-    const t = stripFences(text);
-
-    // 1) Intento directo
-    try {
-      return JSON.parse(t);
-    } catch {}
-
-    // 2) Array raíz -> primer objeto
-    if (t.startsWith("[")) {
-      try {
-        const arr = JSON.parse(t);
-        if (Array.isArray(arr) && arr.length && typeof arr[0] === "object") {
-          return arr[0];
-        }
-      } catch {}
-    }
-
-    // 3) Buscar primer bloque { ... } balanceado
-    const start = t.indexOf("{");
-    if (start >= 0) {
-      let depth = 0;
-      let inStr = false;
-      let esc = false;
-      for (let i = start; i < t.length; i++) {
-        const ch = t[i];
-        if (inStr) {
-          if (esc) {
-            esc = false;
-          } else if (ch === "\\") {
-            esc = true;
-          } else if (ch === '"') {
-            inStr = false;
-          }
-        } else {
-          if (ch === '"') inStr = true;
-          else if (ch === "{") depth++;
-          else if (ch === "}") {
-            depth--;
-            if (depth === 0) {
-              const snippet = t.slice(start, i + 1);
-              try {
-                return JSON.parse(snippet);
-              } catch {}
-              break;
-            }
-          }
-        }
-      }
-    }
-
-    return null;
-  };
-
-  const buildResponse = (planObject, versionTag) => ({
-    statusCode: 200,
-    headers: {
-      ...cors,
-      "Content-Type": "application/json",
-      "x-chefbot-func-version": versionTag || "v4-chefbot-2025-11-18"
+  const responseSchema = {
+    type: Type.OBJECT,
+    properties: {
+      plan_name: { type: Type.STRING },
+      days: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            day_name: { type: Type.STRING },
+            total_macros: {
+              type: Type.OBJECT,
+              properties: {
+                protein_g: { type: Type.NUMBER },
+                fat_g: { type: Type.NUMBER },
+                carbs_g: { type: Type.NUMBER },
+              },
+              required: ["protein_g", "fat_g", "carbs_g"],
+            },
+            meals: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  meal_type: { type: Type.STRING },
+                  recipe_name: { type: Type.STRING },
+                  short_description: { type: Type.STRING },
+                  macros: {
+                    type: Type.OBJECT,
+                    properties: {
+                      protein_g: { type: Type.NUMBER },
+                      fat_g: { type: Type.NUMBER },
+                      carbs_g: { type: Type.NUMBER },
+                    },
+                    required: ["protein_g", "fat_g", "carbs_g"],
+                  },
+                  ingredients: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        name: { type: Type.STRING },
+                        quantity_grams: { type: Type.NUMBER },
+                      },
+                      required: ["name", "quantity_grams"],
+                    },
+                  },
+                  steps: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                  },
+                },
+                required: ["meal_type", "recipe_name", "macros", "ingredients", "steps"],
+              },
+            },
+          },
+          required: ["day_name", "total_macros", "meals"],
+        },
+      },
+      shopping_list: { type: Type.ARRAY, items: { type: Type.STRING } },
+      general_tips: { type: Type.ARRAY, items: { type: Type.STRING } },
     },
-    body: JSON.stringify(planObject)
-  });
-
-  // ---------- BBDD SIMPLIFICADA DE ALIMENTOS (por 100 g) ----------
-  // Valores aproximados, coherentes entre sí. Suficientes para que los cálculos cuadren.
-  const MMX_FOOD_DB = {
-    // LÁCTEOS
-    yogur_natural_0: { label: "Yogur natural 0%", protein: 4, fat: 0, carbs: 4 },
-    yogur_skyr_natural: { label: "Skyr natural", protein: 10, fat: 0, carbs: 4 },
-    queso_fresco_batido_0: { label: "Queso fresco batido 0%", protein: 8, fat: 0, carbs: 4 },
-    leche_semidesnatada: { label: "Leche semidesnatada", protein: 3, fat: 2, carbs: 5 },
-    queso_fresco_burgos: { label: "Queso fresco tipo Burgos", protein: 12, fat: 6, carbs: 2 },
-
-    // CEREALES
-    copos_avena: { label: "Copos de avena", protein: 13, fat: 7, carbs: 60 },
-    pan_integral: { label: "Pan integral", protein: 9, fat: 4, carbs: 45 },
-    arroz_blanco_cocido: { label: "Arroz blanco cocido", protein: 2, fat: 0, carbs: 28 },
-    arroz_integral_cocido: { label: "Arroz integral cocido", protein: 3, fat: 1, carbs: 23 },
-    pasta_integral_cocida: { label: "Pasta integral cocida", protein: 5, fat: 2, carbs: 30 },
-
-    // LEGUMBRES
-    garbanzos_cocidos: { label: "Garbanzos cocidos", protein: 8, fat: 2, carbs: 20 },
-    lentejas_cocidas: { label: "Lentejas cocidas", protein: 8, fat: 1, carbs: 18 },
-    judias_blancas_cocidas: { label: "Judías blancas cocidas", protein: 7, fat: 1, carbs: 14 },
-
-    // PROTEÍNAS ANIMALES / VEGETALES
-    pechuga_pollo: { label: "Pechuga de pollo", protein: 22, fat: 2, carbs: 0 },
-    pavo_magra: { label: "Pavo magro", protein: 22, fat: 2, carbs: 0 },
-    ternera_magra: { label: "Ternera magra", protein: 21, fat: 5, carbs: 0 },
-    albondigas_magra_cocinadas: { label: "Albóndigas magras cocinadas", protein: 18, fat: 10, carbs: 5 },
-    salmon: { label: "Salmón", protein: 20, fat: 13, carbs: 0 },
-    pescado_blanco: { label: "Pescado blanco", protein: 18, fat: 1, carbs: 0 },
-    atun_natural: { label: "Atún al natural escurrido", protein: 24, fat: 1, carbs: 0 },
-    huevo_cocido: { label: "Huevo cocido", protein: 13, fat: 11, carbs: 1 },
-    huevo_crudo: { label: "Huevo crudo", protein: 12, fat: 10, carbs: 1 },
-    tofu_firme: { label: "Tofu firme", protein: 14, fat: 8, carbs: 3 },
-
-    // GRASAS / FRUTOS SECOS
-    frutos_secos_mixtos: { label: "Frutos secos mixtos", protein: 20, fat: 50, carbs: 15 },
-    almendras: { label: "Almendras", protein: 21, fat: 52, carbs: 9 },
-    nueces: { label: "Nueces", protein: 15, fat: 65, carbs: 7 },
-    aceite_oliva: { label: "Aceite de oliva virgen extra", protein: 0, fat: 100, carbs: 0 },
-    aguacate: { label: "Aguacate", protein: 2, fat: 15, carbs: 9 },
-    semillas_mixtas: { label: "Semillas (chía/sésamo)", protein: 18, fat: 31, carbs: 8 },
-
-    // FRUTAS
-    fruta_mixta: { label: "Fruta troceada mixta", protein: 1, fat: 0, carbs: 14 },
-    platano: { label: "Plátano", protein: 1, fat: 0, carbs: 20 },
-    manzana: { label: "Manzana", protein: 0, fat: 0, carbs: 14 },
-    frutos_rojos: { label: "Frutos rojos", protein: 1, fat: 0, carbs: 10 },
-
-    // VERDURAS / HORTALIZAS
-    brocoli: { label: "Brócoli", protein: 3, fat: 0, carbs: 7 },
-    calabacin: { label: "Calabacín", protein: 1, fat: 0, carbs: 3 },
-    berenjena: { label: "Berenjena", protein: 1, fat: 0, carbs: 5 },
-    pimiento_rojo: { label: "Pimiento rojo", protein: 1, fat: 0, carbs: 6 },
-    cebolla: { label: "Cebolla", protein: 1, fat: 0, carbs: 10 },
-    tomate: { label: "Tomate", protein: 1, fat: 0, carbs: 4 },
-    zanahoria: { label: "Zanahoria", protein: 1, fat: 0, carbs: 9 },
-    espinaca: { label: "Espinaca", protein: 3, fat: 0, carbs: 2 },
-    lechuga: { label: "Lechuga", protein: 1, fat: 0, carbs: 2 },
-    mezclum_ensalada: { label: "Mezclum/ensalada verde", protein: 2, fat: 0, carbs: 3 },
-    judias_verdes: { label: "Judías verdes", protein: 2, fat: 0, carbs: 4 },
-    patata: { label: "Patata", protein: 2, fat: 0, carbs: 20 },
-    aceitunas_mixtas: { label: "Aceitunas", protein: 1, fat: 15, carbs: 1 }
+    required: ["plan_name", "days", "shopping_list", "general_tips"],
   };
 
-  const computeMacrosFromIngredients = (ingredients) => {
-    let p = 0;
-    let f = 0;
-    let c = 0;
-    if (!Array.isArray(ingredients)) {
-      return { protein_g: 0, fat_g: 0, carbs_g: 0 };
-    }
-    for (const ing of ingredients) {
-      const qty = safeNumber(ing.quantity_grams, 0);
-      const key = ing.foodKey;
-      if (!qty || !key) continue;
-      const food = MMX_FOOD_DB[key];
-      if (!food) continue;
-      const factor = qty / 100;
-      p += food.protein * factor;
-      f += food.fat * factor;
-      c += food.carbs * factor;
-    }
-    return {
-      protein_g: p,
-      fat_g: f,
-      carbs_g: c
-    };
-  };
-
-  // Ajuste de raciones (Fase 2)
-  const adjustMealToTarget = (templateMeal, mealTargets) => {
-    const ingredientsBase = Array.isArray(templateMeal.ingredients)
-      ? templateMeal.ingredients.map((i) => ({ ...i }))
-      : [];
-
-    if (!ingredientsBase.length) {
-      return {
-        ...templateMeal,
-        source: "fallback",
-        macros: {
-          protein_g: safeNumber(mealTargets.protein_g, 0),
-          fat_g: safeNumber(mealTargets.fat_g, 0),
-          carbs_g: safeNumber(mealTargets.carbs_g, 0)
-        }
-      };
-    }
-
-    const totalBase = computeMacrosFromIngredients(ingredientsBase);
-
-    if (
-      totalBase.protein_g === 0 &&
-      totalBase.fat_g === 0 &&
-      totalBase.carbs_g === 0
-    ) {
-      // No hay datos de MMX_FOOD_DB para estos ingredientes
-      return {
-        ...templateMeal,
-        source: "fallback",
-        macros: {
-          protein_g: safeNumber(mealTargets.protein_g, 0),
-          fat_g: safeNumber(mealTargets.fat_g, 0),
-          carbs_g: safeNumber(mealTargets.carbs_g, 0)
-        }
-      };
-    }
-
-    const scalable = ingredientsBase.filter((i) => i.scalable);
-    const fixed = ingredientsBase.filter((i) => !i.scalable);
-
-    const scalableBase = computeMacrosFromIngredients(scalable);
-    const fixedBase = {
-      protein_g: totalBase.protein_g - scalableBase.protein_g,
-      fat_g: totalBase.fat_g - scalableBase.fat_g,
-      carbs_g: totalBase.carbs_g - scalableBase.carbs_g
-    };
-
-    const tP = safeNumber(mealTargets.protein_g, 0);
-    const tF = safeNumber(mealTargets.fat_g, 0);
-    const tC = safeNumber(mealTargets.carbs_g, 0);
-
-    const ratios = [];
-
-    if (scalableBase.protein_g > 0 && tP > 0) {
-      ratios.push((tP - fixedBase.protein_g) / scalableBase.protein_g);
-    }
-    if (scalableBase.fat_g > 0 && tF > 0) {
-      ratios.push((tF - fixedBase.fat_g) / scalableBase.fat_g);
-    }
-    if (scalableBase.carbs_g > 0 && tC > 0) {
-      ratios.push((tC - fixedBase.carbs_g) / scalableBase.carbs_g);
-    }
-
-    let factor = 1;
-    const validRatios = ratios.filter(
-      (r) => Number.isFinite(r) && r > 0
-    );
-    if (validRatios.length) {
-      validRatios.sort((a, b) => a - b);
-      factor = validRatios[Math.floor(validRatios.length / 2)];
-    }
-    factor = clamp(factor, 0.6, 3.0);
-
-    const adjustedIngredients = ingredientsBase.map((ing) => {
-      if (!ing.scalable) return ing;
-      const baseQty = safeNumber(ing.quantity_grams, 0);
-      if (!baseQty) return ing;
-      const newQty = Math.max(5, Math.round((baseQty * factor) / 5) * 5);
-      return { ...ing, quantity_grams: newQty };
+  try {
+    const response = await ai.models.generateContent({
+      model,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema,
+        maxOutputTokens: 700,
+        thinkingConfig: { thinkingBudget: 0 },
+        systemInstruction: "Eres Chef-, un asistente de nutrición mediterránea experto y eficiente. Generas planes de alimentación estructurados en JSON de forma extremadamente concisa para ahorrar recursos.",
+      },
     });
 
-    const finalMacrosRaw = computeMacrosFromIngredients(adjustedIngredients);
-    const finalMacros = {
-      protein_g: Number(finalMacrosRaw.protein_g.toFixed(1)),
-      fat_g: Number(finalMacrosRaw.fat_g.toFixed(1)),
-      carbs_g: Number(finalMacrosRaw.carbs_g.toFixed(1))
-    };
-
-    const cleanIngredients = adjustedIngredients.map(
-      ({ foodKey, scalable, ...rest }) => rest
-    );
-
+    const text = response.text;
+    if (!text) throw new Error("Respuesta vacía");
+    
     return {
-      ...templateMeal,
-      ingredients: cleanIngredients,
-      source: "fallback",
-      macros: finalMacros
+      plan: JSON.parse(text),
+      usage: response.usageMetadata
     };
-  };
-
-  // ---------- PARSE DEL BODY ----------
-  let body;
-  try {
-    body = JSON.parse(event.body || "{}");
-  } catch {
-    body = {};
+  } catch (error) {
+    console.error("Gemini Error:", error);
+    throw error;
   }
-
-  const mode = body.mode || "day";
-  const payload = body.payload || {};
-
-  const dailyMacros = payload.dailyMacros || {};
-  const targetProtein = safeNumber(dailyMacros.protein_g, 150);
-  const targetFat = safeNumber(dailyMacros.fat_g, 60);
-  const targetCarbs = safeNumber(dailyMacros.carbs_g, 180);
-
-  const numMealsRequested = clamp(
-    parseInt(payload.numMeals, 10) || 3,
-    1,
-    4
-  );
-  const dietaryFilter = (payload.dietaryFilter || "").trim();
-  const fridgeText = (payload.fridgeIngredients || "").trim();
-  const fridgeTokens = normalizeFridgeTokens(fridgeText);
-
-  // ---------- DISTRIBUCIÓN DE MACROS POR COMIDA ----------
-  function computePerMealMacros() {
-    let weights;
-    switch (numMealsRequested) {
-      case 1:
-        weights = [1];
-        break;
-      case 2:
-        weights = [0.55, 0.45]; // comida, cena
-        break;
-      case 3:
-        weights = [0.25, 0.45, 0.30]; // desayuno, comida, cena
-        break;
-      case 4:
-      default:
-        weights = [0.2, 0.4, 0.1, 0.3]; // desayuno, comida, snack, cena
-        break;
-    }
-
-    const perMeal = [];
-    let accP = 0;
-    let accF = 0;
-    let accC = 0;
-
-    for (let i = 0; i < weights.length; i++) {
-      const w = weights[i];
-      const isLast = i === weights.length - 1;
-      let p = Math.round(targetProtein * w);
-      let f = Math.round(targetFat * w);
-      let c = Math.round(targetCarbs * w);
-
-      if (isLast) {
-        p = Math.max(0, targetProtein - accP);
-        f = Math.max(0, targetFat - accF);
-        c = Math.max(0, targetCarbs - accC);
-      }
-
-      accP += p;
-      accF += f;
-      accC += c;
-
-      perMeal.push({
-        protein_g: p,
-        fat_g: f,
-        carbs_g: c
-      });
-    }
-
-    return perMeal;
-  }
-
-  // ---------- PLANTILLAS FALLBACK (con foodKey + scalable) ----------
-  function breakfastTemplates() {
-    return [
-      {
-        id: "desayuno_yogur_avena",
-        meal_type: "Desayuno",
-        recipe_name: "Bol de yogur con avena, fruta y frutos secos",
-        short_description:
-          "Desayuno tipo mediterráneo con lácteos, cereal integral, fruta y un toque de grasa saludable.",
-        ingredients: [
-          {
-            name: "Yogur tipo skyr natural",
-            quantity_grams: 180,
-            notes: "Sin azúcar añadido",
-            foodKey: "yogur_skyr_natural",
-            scalable: true
-          },
-          {
-            name: "Copos de avena",
-            quantity_grams: 40,
-            notes: "",
-            foodKey: "copos_avena",
-            scalable: true
-          },
-          {
-            name: "Fruta troceada (plátano, manzana o frutos rojos)",
-            quantity_grams: 80,
-            notes: "",
-            foodKey: "fruta_mixta",
-            scalable: true
-          },
-          {
-            name: "Frutos secos (nueces o almendras)",
-            quantity_grams: 15,
-            notes: "Picados",
-            foodKey: "frutos_secos_mixtos",
-            scalable: true
-          }
-        ],
-        steps: [
-          "Sirve el yogur en un bol.",
-          "Añade los copos de avena y mezcla ligeramente.",
-          "Incorpora la fruta troceada por encima.",
-          "Termina con los frutos secos picados. Puedes añadir canela si te gusta."
-        ]
-      },
-      {
-        id: "desayuno_tostada_huevo",
-        meal_type: "Desayuno",
-        recipe_name: "Tostadas integrales con huevo y tomate",
-        short_description:
-          "Desayuno salado sencillo con pan integral, proteína de calidad y tomate.",
-        ingredients: [
-          {
-            name: "Pan integral",
-            quantity_grams: 70,
-            notes: "Preferiblemente de masa madre",
-            foodKey: "pan_integral",
-            scalable: true
-          },
-          {
-            name: "Huevo",
-            quantity_grams: 60,
-            notes: "Mediano",
-            foodKey: "huevo_crudo",
-            scalable: true
-          },
-          {
-            name: "Tomate triturado o rallado",
-            quantity_grams: 80,
-            notes: "Sin azúcar añadido",
-            foodKey: "tomate",
-            scalable: false
-          },
-          {
-            name: "Aceite de oliva virgen extra",
-            quantity_grams: 5,
-            notes: "Un chorrito",
-            foodKey: "aceite_oliva",
-            scalable: true
-          }
-        ],
-        steps: [
-          "Tuesta el pan integral.",
-          "Cocina el huevo a la plancha, revuelto o cocido.",
-          "Unta el tomate sobre las tostadas.",
-          "Coloca el huevo encima y aliña con el aceite de oliva y sal al gusto."
-        ]
-      }
-    ];
-  }
-
-  function lunchTemplates() {
-    return [
-      {
-        id: "comida_pollo_arroz",
-        meal_type: "Comida",
-        recipe_name:
-          "Bol de pollo con arroz integral, brócoli y verduras salteadas",
-        short_description:
-          "Plato de un solo bol con proteína, cereal integral y verduras variadas.",
-        ingredients: [
-          {
-            name: "Pechuga de pollo",
-            quantity_grams: 200,
-            notes: "En dados o tiras",
-            foodKey: "pechuga_pollo",
-            scalable: true
-          },
-          {
-            name: "Arroz integral cocido",
-            quantity_grams: 150,
-            notes: "",
-            foodKey: "arroz_integral_cocido",
-            scalable: true
-          },
-          {
-            name: "Brócoli",
-            quantity_grams: 120,
-            notes: "En ramilletes",
-            foodKey: "brocoli",
-            scalable: false
-          },
-          {
-            name: "Cebolla",
-            quantity_grams: 40,
-            notes: "Picada",
-            foodKey: "cebolla",
-            scalable: false
-          },
-          {
-            name: "Pimiento rojo",
-            quantity_grams: 40,
-            notes: "En tiras",
-            foodKey: "pimiento_rojo",
-            scalable: false
-          },
-          {
-            name: "Aceite de oliva virgen extra",
-            quantity_grams: 10,
-            notes: "Para cocinar y aliñar",
-            foodKey: "aceite_oliva",
-            scalable: true
-          }
-        ],
-        steps: [
-          "Cocina el arroz integral siguiendo las instrucciones del envase.",
-          "En una sartén, sofríe la cebolla y el pimiento con parte del aceite.",
-          "Añade el pollo troceado y cocina hasta que esté bien hecho.",
-          "Incorpora el brócoli (salteado o al vapor) y mezcla todo.",
-          "Sirve el arroz en la base y coloca el salteado de pollo y verduras por encima. Aliña con el aceite restante."
-        ]
-      },
-      {
-        id: "comida_salmon_patat",
-        meal_type: "Comida",
-        recipe_name: "Salmón al horno con patata y judías verdes",
-        short_description:
-          "Plato de pescado azul con tubérculo y verdura, muy típico de un patrón mediterráneo.",
-        ingredients: [
-          {
-            name: "Lomo de salmón",
-            quantity_grams: 170,
-            notes: "",
-            foodKey: "salmon",
-            scalable: true
-          },
-          {
-            name: "Patata",
-            quantity_grams: 180,
-            notes: "En rodajas o dados",
-            foodKey: "patata",
-            scalable: true
-          },
-          {
-            name: "Judías verdes",
-            quantity_grams: 120,
-            notes: "Frescas o congeladas",
-            foodKey: "judias_verdes",
-            scalable: false
-          },
-          {
-            name: "Aceite de oliva virgen extra",
-            quantity_grams: 10,
-            notes: "Para hornear y aliñar",
-            foodKey: "aceite_oliva",
-            scalable: true
-          }
-        ],
-        steps: [
-          "Precalienta el horno a 180–200 °C.",
-          "Coloca la patata troceada en una bandeja con parte del aceite y sal. Hornea unos minutos.",
-          "Añade el salmón y las judías verdes a la bandeja, aliña con el resto del aceite.",
-          "Hornea hasta que el salmón esté hecho y las verduras tiernas.",
-          "Sirve todo junto en un plato."
-        ]
-      },
-      {
-        id: "comida_pasta_atun",
-        meal_type: "Comida",
-        recipe_name: "Pasta integral con atún, tomate y aceitunas",
-        short_description:
-          "Plato único de pasta con proteína y verduras, tipo ensalada templada.",
-        ingredients: [
-          {
-            name: "Pasta integral cocida",
-            quantity_grams: 160,
-            notes: "",
-            foodKey: "pasta_integral_cocida",
-            scalable: true
-          },
-          {
-            name: "Atún al natural o en aceite escurrido",
-            quantity_grams: 100,
-            notes: "",
-            foodKey: "atun_natural",
-            scalable: true
-          },
-          {
-            name: "Tomate",
-            quantity_grams: 80,
-            notes: "En trocitos",
-            foodKey: "tomate",
-            scalable: false
-          },
-          {
-            name: "Cebolla",
-            quantity_grams: 30,
-            notes: "Muy picada",
-            foodKey: "cebolla",
-            scalable: false
-          },
-          {
-            name: "Aceitunas negras o verdes",
-            quantity_grams: 20,
-            notes: "Troceadas",
-            foodKey: "aceitunas_mixtas",
-            scalable: true
-          },
-          {
-            name: "Aceite de oliva virgen extra",
-            quantity_grams: 8,
-            notes: "Para aliñar",
-            foodKey: "aceite_oliva",
-            scalable: true
-          }
-        ],
-        steps: [
-          "Cuece la pasta integral al dente.",
-          "Mientras tanto, mezcla en un bol el atún desmigado, el tomate, la cebolla y las aceitunas.",
-          "Escurre la pasta y mézclala con el resto de ingredientes.",
-          "Aliña con el aceite de oliva y ajusta de sal y especias al gusto."
-        ]
-      },
-      {
-        id: "comida_albondigas_arroz",
-        meal_type: "Comida",
-        recipe_name:
-          "Albóndigas de carne magra con arroz integral y ensalada de tomate",
-        short_description:
-          "Versión casera de albóndigas con guarnición sencilla de cereal integral y ensalada.",
-        ingredients: [
-          {
-            name: "Albóndigas de carne magra (pavo o ternera magra)",
-            quantity_grams: 180,
-            notes: "Ya formadas o caseras",
-            foodKey: "albondigas_magra_cocinadas",
-            scalable: true
-          },
-          {
-            name: "Arroz integral cocido",
-            quantity_grams: 150,
-            notes: "",
-            foodKey: "arroz_integral_cocido",
-            scalable: true
-          },
-          {
-            name: "Tomate",
-            quantity_grams: 100,
-            notes: "En rodajas o dados",
-            foodKey: "tomate",
-            scalable: false
-          },
-          {
-            name: "Lechuga o mezclum",
-            quantity_grams: 40,
-            notes: "",
-            foodKey: "mezclum_ensalada",
-            scalable: false
-          },
-          {
-            name: "Aceite de oliva virgen extra",
-            quantity_grams: 10,
-            notes: "Para cocinar y aliñar",
-            foodKey: "aceite_oliva",
-            scalable: true
-          }
-        ],
-        steps: [
-          "Cocina las albóndigas a la plancha o en una sartén con un poco de aceite hasta que estén hechas por dentro.",
-          "Calienta o cocina el arroz integral.",
-          "Prepara una ensalada con el tomate y la lechuga, aliñada con parte del aceite.",
-          "Sirve las albóndigas junto al arroz y acompaña con la ensalada."
-        ]
-      },
-      {
-        id: "comida_garbanzo_ensalada",
-        meal_type: "Comida",
-        recipe_name: "Ensalada templada de garbanzos con verduras y huevo",
-        short_description:
-          "Plato de legumbre tipo ensalada templada, con verdura y algo de proteína extra.",
-        ingredients: [
-          {
-            name: "Garbanzos cocidos",
-            quantity_grams: 160,
-            notes: "Escurridos y aclarados",
-            foodKey: "garbanzos_cocidos",
-            scalable: true
-          },
-          {
-            name: "Pimiento rojo",
-            quantity_grams: 40,
-            notes: "En tiras",
-            foodKey: "pimiento_rojo",
-            scalable: false
-          },
-          {
-            name: "Cebolla",
-            quantity_grams: 30,
-            notes: "Picada fina",
-            foodKey: "cebolla",
-            scalable: false
-          },
-          {
-            name: "Tomate",
-            quantity_grams: 80,
-            notes: "En dados",
-            foodKey: "tomate",
-            scalable: false
-          },
-          {
-            name: "Huevo cocido",
-            quantity_grams: 60,
-            notes: "En trozos",
-            foodKey: "huevo_cocido",
-            scalable: true
-          },
-          {
-            name: "Aceite de oliva virgen extra",
-            quantity_grams: 8,
-            notes: "Para aliñar",
-            foodKey: "aceite_oliva",
-            scalable: true
-          }
-        ],
-        steps: [
-          "Enjuaga los garbanzos y escúrrelos bien.",
-          "Mezcla los garbanzos con el pimiento, la cebolla y el tomate.",
-          "Añade el huevo cocido troceado.",
-          "Aliña con el aceite de oliva, sal y especias al gusto."
-        ]
-      }
-    ];
-  }
-
-  function dinnerTemplates() {
-    return [
-      {
-        id: "cena_lentejas_verduras",
-        meal_type: "Cena",
-        recipe_name:
-          "Bol de lentejas estofadas con verduras y ensalada verde",
-        short_description:
-          "Plato caliente de legumbre con verduras y un pequeño acompañamiento de ensalada.",
-        ingredients: [
-          {
-            name: "Lentejas cocidas",
-            quantity_grams: 250,
-            notes: "Escurridas",
-            foodKey: "lentejas_cocidas",
-            scalable: true
-          },
-          {
-            name: "Cebolla",
-            quantity_grams: 40,
-            notes: "Picada",
-            foodKey: "cebolla",
-            scalable: false
-          },
-          {
-            name: "Pimiento rojo",
-            quantity_grams: 40,
-            notes: "En tiras",
-            foodKey: "pimiento_rojo",
-            scalable: false
-          },
-          {
-            name: "Tomate",
-            quantity_grams: 60,
-            notes: "Trocitos o triturado",
-            foodKey: "tomate",
-            scalable: false
-          },
-          {
-            name: "Zanahoria",
-            quantity_grams: 40,
-            notes: "En rodajas finas (opcional)",
-            foodKey: "zanahoria",
-            scalable: false
-          },
-          {
-            name: "Ensalada verde (mezclum)",
-            quantity_grams: 40,
-            notes: "Para acompañar",
-            foodKey: "mezclum_ensalada",
-            scalable: false
-          },
-          {
-            name: "Aceite de oliva virgen extra",
-            quantity_grams: 6,
-            notes: "Para sofreír y aliñar",
-            foodKey: "aceite_oliva",
-            scalable: true
-          }
-        ],
-        steps: [
-          "En una cazuela, sofríe la cebolla y el pimiento con parte del aceite.",
-          "Añade la zanahoria y el tomate, y cocina unos minutos.",
-          "Incorpora las lentejas cocidas y deja que se calienten a fuego suave.",
-          "Sirve las lentejas en un bol y acompaña con la ensalada verde aliñada con el resto del aceite."
-        ]
-      },
-      {
-        id: "cena_tortilla_ensalada",
-        meal_type: "Cena",
-        recipe_name: "Tortilla de huevos con patata ligera y ensalada verde",
-        short_description:
-          "Cena clásica de tortilla con una ración moderada de patata y ensalada.",
-        ingredients: [
-          {
-            name: "Huevo",
-            quantity_grams: 120,
-            notes: "2 medianos",
-            foodKey: "huevo_crudo",
-            scalable: true
-          },
-          {
-            name: "Patata",
-            quantity_grams: 120,
-            notes: "En láminas finas",
-            foodKey: "patata",
-            scalable: true
-          },
-          {
-            name: "Cebolla",
-            quantity_grams: 30,
-            notes: "Opcional, muy picada",
-            foodKey: "cebolla",
-            scalable: false
-          },
-          {
-            name: "Ensalada verde (mezclum)",
-            quantity_grams: 50,
-            notes: "Para acompañar",
-            foodKey: "mezclum_ensalada",
-            scalable: false
-          },
-          {
-            name: "Aceite de oliva virgen extra",
-            quantity_grams: 8,
-            notes: "Para cocinar y aliñar",
-            foodKey: "aceite_oliva",
-            scalable: true
-          }
-        ],
-        steps: [
-          "Pocha la patata (y la cebolla si la usas) en una sartén con parte del aceite a fuego suave.",
-          "Bate los huevos y mézclalos con la patata escurrida de exceso de aceite.",
-          "Cuaja la tortilla en la sartén por ambos lados.",
-          "Sirve una ración de tortilla acompañada de ensalada verde aliñada."
-        ]
-      },
-      {
-        id: "cena_pescado_verduras",
-        meal_type: "Cena",
-        recipe_name: "Pescado blanco a la plancha con calabacín y berenjena",
-        short_description:
-          "Cena ligera con proteína magra y verdura a la plancha.",
-        ingredients: [
-          {
-            name: "Filete de pescado blanco",
-            quantity_grams: 160,
-            notes: "",
-            foodKey: "pescado_blanco",
-            scalable: true
-          },
-          {
-            name: "Calabacín",
-            quantity_grams: 80,
-            notes: "En rodajas",
-            foodKey: "calabacin",
-            scalable: false
-          },
-          {
-            name: "Berenjena",
-            quantity_grams: 80,
-            notes: "En rodajas",
-            foodKey: "berenjena",
-            scalable: false
-          },
-          {
-            name: "Aceite de oliva virgen extra",
-            quantity_grams: 8,
-            notes: "Para la plancha",
-            foodKey: "aceite_oliva",
-            scalable: true
-          }
-        ],
-        steps: [
-          "Corta el calabacín y la berenjena en rodajas.",
-          "Cocina las verduras a la plancha con parte del aceite.",
-          "En la misma plancha o sartén, cocina el pescado blanco con el resto del aceite.",
-          "Sirve el pescado acompañado de las verduras a la plancha."
-        ]
-      },
-      {
-        id: "cena_pollo_ensalada",
-        meal_type: "Cena",
-        recipe_name: "Pollo a la plancha con ensalada completa",
-        short_description:
-          "Cena sencilla a base de pollo a la plancha y ensalada con verduras variadas.",
-        ingredients: [
-          {
-            name: "Pechuga de pollo",
-            quantity_grams: 150,
-            notes: "En filetes",
-            foodKey: "pechuga_pollo",
-            scalable: true
-          },
-          {
-            name: "Ensalada verde (mezclum)",
-            quantity_grams: 60,
-            notes: "",
-            foodKey: "mezclum_ensalada",
-            scalable: false
-          },
-          {
-            name: "Tomate",
-            quantity_grams: 60,
-            notes: "En dados o rodajas",
-            foodKey: "tomate",
-            scalable: false
-          },
-          {
-            name: "Zanahoria",
-            quantity_grams: 30,
-            notes: "Rallada",
-            foodKey: "zanahoria",
-            scalable: false
-          },
-          {
-            name: "Aceite de oliva virgen extra",
-            quantity_grams: 8,
-            notes: "Para cocinar y aliñar",
-            foodKey: "aceite_oliva",
-            scalable: true
-          }
-        ],
-        steps: [
-          "Cocina la pechuga de pollo a la plancha con parte del aceite.",
-          "Prepara una ensalada con el mezclum, el tomate y la zanahoria.",
-          "Aliña la ensalada con el resto del aceite y ajusta de sal.",
-          "Sirve el pollo junto a la ensalada."
-        ]
-      },
-      {
-        id: "cena_albondigas_verduras",
-        meal_type: "Cena",
-        recipe_name: "Albóndigas de carne magra con verduras salteadas",
-        short_description:
-          "Cena con albóndigas acompañadas de un salteado ligero de verduras.",
-        ingredients: [
-          {
-            name: "Albóndigas de carne magra (pavo o ternera magra)",
-            quantity_grams: 160,
-            notes: "",
-            foodKey: "albondigas_magra_cocinadas",
-            scalable: true
-          },
-          {
-            name: "Calabacín",
-            quantity_grams: 70,
-            notes: "En dados",
-            foodKey: "calabacin",
-            scalable: false
-          },
-          {
-            name: "Pimiento rojo",
-            quantity_grams: 40,
-            notes: "En tiras",
-            foodKey: "pimiento_rojo",
-            scalable: false
-          },
-          {
-            name: "Cebolla",
-            quantity_grams: 30,
-            notes: "Picada",
-            foodKey: "cebolla",
-            scalable: false
-          },
-          {
-            name: "Aceite de oliva virgen extra",
-            quantity_grams: 8,
-            notes: "Para saltear y terminar",
-            foodKey: "aceite_oliva",
-            scalable: true
-          }
-        ],
-        steps: [
-          "Cocina las albóndigas en una sartén con parte del aceite hasta que estén bien hechas.",
-          "En otra sartén, saltea el calabacín, el pimiento y la cebolla con el resto del aceite.",
-          "Sirve las albóndigas acompañadas del salteado de verduras."
-        ]
-      }
-    ];
-  }
-
-  function snackTemplates() {
-    return [
-      {
-        id: "snack_yogur_fruta",
-        meal_type: "Merienda / Snack",
-        recipe_name: "Yogur con fruta troceada y semillas",
-        short_description:
-          "Pequeño snack proteico con lácteo y fruta para completar el día.",
-        ingredients: [
-          {
-            name: "Yogur natural",
-            quantity_grams: 120,
-            notes: "",
-            foodKey: "yogur_natural_0",
-            scalable: true
-          },
-          {
-            name: "Fruta troceada",
-            quantity_grams: 60,
-            notes: "",
-            foodKey: "fruta_mixta",
-            scalable: true
-          },
-          {
-            name: "Semillas (chía o sésamo)",
-            quantity_grams: 5,
-            notes: "",
-            foodKey: "semillas_mixtas",
-            scalable: true
-          }
-        ],
-        steps: [
-          "Sirve el yogur en un bol.",
-          "Añade la fruta troceada.",
-          "Espolvorea las semillas por encima."
-        ]
-      },
-      {
-        id: "snack_tostada_queso",
-        meal_type: "Merienda / Snack",
-        recipe_name: "Tostada integral con queso fresco y tomate",
-        short_description:
-          "Snack sencillo de pan integral con lácteo fresco y verdura.",
-        ingredients: [
-          {
-            name: "Pan integral",
-            quantity_grams: 40,
-            notes: "",
-            foodKey: "pan_integral",
-            scalable: true
-          },
-          {
-            name: "Queso fresco tipo burgos",
-            quantity_grams: 60,
-            notes: "",
-            foodKey: "queso_fresco_burgos",
-            scalable: true
-          },
-          {
-            name: "Tomate",
-            quantity_grams: 40,
-            notes: "En rodajas",
-            foodKey: "tomate",
-            scalable: false
-          },
-          {
-            name: "Aceite de oliva virgen extra",
-            quantity_grams: 3,
-            notes: "Un chorrito",
-            foodKey: "aceite_oliva",
-            scalable: true
-          }
-        ],
-        steps: [
-          "Tuesta ligeramente el pan integral.",
-          "Coloca el queso fresco y el tomate encima.",
-          "Aliña con un poco de aceite de oliva."
-        ]
-      }
-    ];
-  }
-
-  // ---------- PICKERS CON LÓGICA DE NEVERA ----------
-  function pickBreakfastFromFallback() {
-    const list = breakfastTemplates();
-    return chooseRandom(list) || list[0];
-  }
-
-  function pickLunchFromFallback() {
-    let list = lunchTemplates();
-    if (!list.length) return null;
-
-    const prefs = [
-      { token: "albondig", ids: ["comida_albondigas_arroz"] },
-      { token: "salmon", ids: ["comida_salmon_patat"] },
-      { token: "atun", ids: ["comida_pasta_atun"] },
-      { token: "garbanzo", ids: ["comida_garbanzo_ensalada"] },
-      { token: "lentej", ids: ["comida_garbanzo_ensalada"] },
-      { token: "pollo", ids: ["comida_pollo_arroz"] }
-    ];
-
-    for (const pref of prefs) {
-      if (hasToken(fridgeTokens, pref.token)) {
-        const filtered = list.filter((m) => pref.ids.includes(m.id));
-        if (filtered.length) return chooseRandom(filtered);
-      }
-    }
-
-    return chooseRandom(list) || list[0];
-  }
-
-  function pickDinnerFromFallback() {
-    let list = dinnerTemplates();
-    if (!list.length) return null;
-
-    const prefs = [
-      { token: "albondig", ids: ["cena_albondigas_verduras"] },
-      { token: "salmon", ids: ["cena_pescado_verduras"] },
-      { token: "merluza", ids: ["cena_pescado_verduras"] },
-      { token: "pescad", ids: ["cena_pescado_verduras"] },
-      { token: "lentej", ids: ["cena_lentejas_verduras"] },
-      { token: "pollo", ids: ["cena_pollo_ensalada"] },
-      { token: "huevo", ids: ["cena_tortilla_ensalada"] }
-    ];
-
-    for (const pref of prefs) {
-      if (hasToken(fridgeTokens, pref.token)) {
-        const filtered = list.filter((m) => pref.ids.includes(m.id));
-        if (filtered.length) return chooseRandom(filtered);
-      }
-    }
-
-    return chooseRandom(list) || list[0];
-  }
-
-  function pickSnackFromFallback() {
-    const list = snackTemplates();
-    return chooseRandom(list) || list[0];
-  }
-
-  // ---------- CONSTRUCCIÓN DEL PLAN FALLBACK (CON AJUSTE DE RACIONES) ----------
-  function buildFallbackDayPlan(technicalReason) {
-    const perMealMacros = computePerMealMacros();
-    const meals = [];
-
-    if (numMealsRequested === 1) {
-      const m = pickLunchFromFallback();
-      if (m) {
-        meals.push(adjustMealToTarget(m, perMealMacros[0]));
-      }
-    } else if (numMealsRequested === 2) {
-      const lunch = pickLunchFromFallback();
-      const dinner = pickDinnerFromFallback();
-      if (lunch) meals.push(adjustMealToTarget(lunch, perMealMacros[0]));
-      if (dinner) meals.push(adjustMealToTarget(dinner, perMealMacros[1]));
-    } else if (numMealsRequested === 3) {
-      const b = pickBreakfastFromFallback();
-      const l = pickLunchFromFallback();
-      const d = pickDinnerFromFallback();
-      if (b) meals.push(adjustMealToTarget(b, perMealMacros[0]));
-      if (l) meals.push(adjustMealToTarget(l, perMealMacros[1]));
-      if (d) meals.push(adjustMealToTarget(d, perMealMacros[2]));
-    } else {
-      const b = pickBreakfastFromFallback();
-      const l = pickLunchFromFallback();
-      const s = pickSnackFromFallback();
-      const d = pickDinnerFromFallback();
-      if (b) meals.push(adjustMealToTarget(b, perMealMacros[0]));
-      if (l) meals.push(adjustMealToTarget(l, perMealMacros[1]));
-      if (s) meals.push(adjustMealToTarget(s, perMealMacros[2]));
-      if (d) meals.push(adjustMealToTarget(d, perMealMacros[3]));
-    }
-
-    // Macros totales del día, a partir de las comidas ajustadas
-    const total_macros = meals.reduce(
-      (acc, m) => {
-        const mm = m.macros || {};
-        acc.protein_g += safeNumber(mm.protein_g, 0);
-        acc.fat_g += safeNumber(mm.fat_g, 0);
-        acc.carbs_g += safeNumber(mm.carbs_g, 0);
-        return acc;
-      },
-      { protein_g: 0, fat_g: 0, carbs_g: 0 }
-    );
-
-    // Lista de la compra
-    const shopping_map = new Map();
-    for (const meal of meals) {
-      const ings = Array.isArray(meal.ingredients) ? meal.ingredients : [];
-      for (const ing of ings) {
-        const key = ing.name;
-        const qty = safeNumber(ing.quantity_grams, 0);
-        if (!key || qty <= 0) continue;
-        shopping_map.set(key, (shopping_map.get(key) || 0) + qty);
-      }
-    }
-    const shopping_list = [];
-    for (const [name, qty] of shopping_map.entries()) {
-      shopping_list.push(`${Math.round(qty)} g de ${name}`);
-    }
-
-    const tips = baseNutritionTips();
-    if (technicalReason) {
-      tips.push(
-        "Este menú se ha generado usando el modo automático de Chef-Bot sin depender totalmente de la IA (motivo técnico: " +
-          technicalReason +
-          ")."
-      );
-    }
-    tips.push(
-      `Los objetivos diarios introducidos eran aproximadamente: ${Math.round(
-        targetProtein
-      )} g de proteína, ${Math.round(
-        targetFat
-      )} g de grasa y ${Math.round(
-        targetCarbs
-      )} g de hidratos de carbono.`
-    );
-    if (fridgeText) {
-      tips.push(
-        `Se ha intentado tener en cuenta algunos de los ingredientes de tu nevera: "${fridgeText}".`
-      );
-    }
-
-    return {
-      mode: "day",
-      plan_name: "Menú de 1 día generado por Chef-Bot",
-      days: [
-        {
-          day_name: "Menú del día",
-          total_macros,
-          meals
-        }
-      ],
-      shopping_list,
-      general_tips: tips
-    };
-  }
-
-  // ---------- SI NO HAY API KEY → FALLBACK DIRECTO ----------
-  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-  if (!GEMINI_API_KEY) {
-    const plan = buildFallbackDayPlan("configuración: falta GEMINI_API_KEY");
-    return buildResponse(plan, "v4-chefbot-fallback-no-key");
-  }
-
-  // ---------- LLAMADA A GEMINI ----------
-  const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-
-  const systemPrompt = `
-Eres un planificador de menús diarios orientativos, no un profesional sanitario.
-Tu tarea es generar UN MENÚ DE 1 DÍA en formato JSON para una persona adulta sana,
-ajustando lo máximo posible los macros diarios indicados.
-
-Reglas importantes:
-- El menú es genérico y nunca sustituye el consejo de un profesional sanitario o un dietista-nutricionista.
-- Ajusta los macros de cada comida de forma que el total del día se acerque lo más posible a los objetivos indicados (proteínas, grasas, hidratos).
-- Estilo preferente: patrón mediterráneo casero (verdura, legumbre, cereales integrales, proteína de calidad, aceite de oliva…).
-- Si fridgeIngredients NO está vacío, al menos una de las comidas (preferentemente COMIDA o CENA) debe usar explícitamente uno de esos ingredientes como principal o acompañamiento,
-  salvo que vaya contra restricciones dietéticas de forma coherente.
-- Puedes inventar platos nuevos siempre que sean realistas y razonables dentro de un contexto mediterráneo.
-- No des consejos médicos ni ajustes farmacológicos. No menciones enfermedades, tratamientos ni pruebas diagnósticas.
-
-Formato de salida (JSON plano, sin texto extra):
-{
-  "mode": "day",
-  "plan_name": string,
-  "days": [
-    {
-      "day_name": string,
-      "total_macros": { "protein_g": number, "fat_g": number, "carbs_g": number },
-      "meals": [
-        {
-          "meal_type": string,
-          "recipe_name": string,
-          "short_description": string,
-          "macros": { "protein_g": number, "fat_g": number, "carbs_g": number },
-          "ingredients": [
-            { "name": string, "quantity_grams": number, "notes": string }
-          ],
-          "steps": [ string, ... ],
-          "source": "ai"
-        }
-      ]
-    }
-  ],
-  "shopping_list": [ string, ... ],
-  "general_tips": [ string, ... ]
-}
-
-Devuelve ÚNICAMENTE ese JSON, sin explicaciones alrededor.
-`;
-
-  const userPrompt = `
-Objetivos diarios aproximados:
-- Proteína: ~${Math.round(targetProtein)} g
-- Grasas: ~${Math.round(targetFat)} g
-- Hidratos: ~${Math.round(targetCarbs)} g
-
-Número de comidas deseado: ${numMealsRequested}.
-Restricciones dietéticas o preferencias declaradas: ${
-    dietaryFilter || "no especificadas"
-  }.
-Ingredientes disponibles en la nevera (puedes usarlos si encajan): ${
-    fridgeText || "no especificados"
-  }.
-
-Genera un único menú de 1 día que siga las reglas anteriores y el formato JSON indicado.
-`;
-
-  const TIMEOUT_MS = Math.min(
-    parseInt(process.env.GEMINI_TIMEOUT_MS || "8000", 10),
-    9500
-  );
-
-  let apiJson;
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: systemPrompt + "\n\n" + userPrompt }]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.35,
-          maxOutputTokens: 900
-        }
-      }),
-      signal: controller.signal
-    });
-
-    clearTimeout(timeoutId);
-
-    const raw = await res.text();
-    if (!res.ok) {
-      const reason = `error API (${res.status})`;
-      const plan = buildFallbackDayPlan(reason);
-      return buildResponse(plan, "v4-chefbot-fallback-api-error");
-    }
-
-    apiJson = raw ? JSON.parse(raw) : {};
-  } catch (err) {
-    const reason =
-      err && err.name === "AbortError"
-        ? "timeout al llamar a la IA"
-        : "error de red al llamar a la IA";
-    const plan = buildFallbackDayPlan(reason);
-    return buildResponse(plan, "v4-chefbot-fallback-timeout");
-  }
-
-  // ---------- NORMALIZACIÓN RESPUESTA IA ----------
-  const textCandidate =
-    apiJson?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  const parsed = robustParseJSON(textCandidate);
-
-  const tipsBase = baseNutritionTips();
-
-  if (
-    !parsed ||
-    !Array.isArray(parsed.days) ||
-    !parsed.days.length ||
-    !Array.isArray(parsed.days[0].meals) ||
-    !parsed.days[0].meals.length
-  ) {
-    const plan = buildFallbackDayPlan("respuesta IA no válida o vacía");
-    return buildResponse(plan, "v4-chefbot-fallback-invalid-json");
-  }
-
-  const day0 = parsed.days[0];
-  const meals = day0.meals.map((m) => ({
-    ...m,
-    source: "ai"
-  }));
-
-  const total_macros = meals.reduce(
-    (acc, m) => {
-      const mm = m.macros || {};
-      acc.protein_g += safeNumber(mm.protein_g, 0);
-      acc.fat_g += safeNumber(mm.fat_g, 0);
-      acc.carbs_g += safeNumber(mm.carbs_g, 0);
-      return acc;
-    },
-    { protein_g: 0, fat_g: 0, carbs_g: 0 }
-  );
-
-  const dayNormalized = {
-    day_name: day0.day_name || "Menú del día",
-    total_macros: {
-      protein_g: total_macros.protein_g,
-      fat_g: total_macros.fat_g,
-      carbs_g: total_macros.carbs_g
-    },
-    meals
-  };
-
-  const shopping_map = new Map();
-  for (const meal of meals) {
-    const ings = Array.isArray(meal.ingredients) ? meal.ingredients : [];
-    for (const ing of ings) {
-      const key = ing.name;
-      const qty = safeNumber(ing.quantity_grams, 0);
-      if (!key || qty <= 0) continue;
-      shopping_map.set(key, (shopping_map.get(key) || 0) + qty);
-    }
-  }
-  const shopping_list = [];
-  for (const [name, qty] of shopping_map.entries()) {
-    shopping_list.push(`${Math.round(qty)} g de ${name}`);
-  }
-
-  const extraTips = Array.isArray(parsed.general_tips)
-    ? parsed.general_tips.filter((t) => typeof t === "string" && t.trim())
-    : [];
-
-  const planFromAi = {
-    mode: "day",
-    plan_name:
-      parsed.plan_name || "Menú de 1 día generado por Chef-Bot con IA",
-    days: [dayNormalized],
-    shopping_list: shopping_list.length
-      ? shopping_list
-      : parsed.shopping_list || [],
-    general_tips: [
-      ...tipsBase,
-      `Los objetivos diarios introducidos eran aproximadamente: ${Math.round(
-        targetProtein
-      )} g de proteína, ${Math.round(
-        targetFat
-      )} g de grasa y ${Math.round(
-        targetCarbs
-      )} g de hidratos de carbono.`,
-      ...(fridgeText
-        ? [
-            `Se ha intentado utilizar al menos uno de los ingredientes de tu nevera en alguna de las comidas: "${fridgeText}".`
-          ]
-        : []),
-      ...extraTips
-    ]
-  };
-
-  return buildResponse(planFromAi, "v4-chefbot-ai-ok");
 };
+
+// --- COMPONENTES ---
+
+const Alert = ({ message, onClose }) => (
+  <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl flex items-start justify-between shadow-sm animate-in fade-in duration-300">
+    <p className="text-sm text-red-700 font-medium">{message}</p>
+    <button onClick={onClose} className="text-red-400 hover:text-red-500">&times;</button>
+  </div>
+);
+
+const Loader = () => (
+  <div className="fixed inset-0 bg-white/95 backdrop-blur-xl z-[100] flex flex-col items-center justify-center p-6 text-center">
+    <div className="relative mb-10 scale-150 w-20 h-20">
+      <div className="w-20 h-20 border-[6px] border-gray-100 rounded-[2rem] absolute"></div>
+      <div className="w-20 h-20 border-[6px] border-[#00BCC9] rounded-[2rem] absolute border-t-transparent animate-spin-slow"></div>
+    </div>
+    <h3 className="text-2xl font-black text-[#003d5b]">Chef- está cocinando tu plan...</h3>
+    <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest mt-2">Gemini 2.5 Flash-Lite Engine</p>
+  </div>
+);
+
+const MacroBadge = ({ label, value, unit, colorClass, barClass }) => (
+  <div className="bg-gray-50/50 p-3 rounded-2xl border border-gray-100 flex flex-col items-center text-center">
+    <span className="text-[9px] font-black text-gray-400 uppercase mb-1">{label}</span>
+    <div className="flex items-baseline gap-0.5">
+      <span className={`text-xl font-black ${colorClass}`}>{Math.round(value)}</span>
+      <span className="text-[9px] font-bold text-gray-400">{unit}</span>
+    </div>
+    <div className="w-6 h-1 mt-2 rounded-full bg-gray-200 overflow-hidden">
+        <div className={`h-full ${barClass}`} style={{ width: '100%' }}></div>
+    </div>
+  </div>
+);
+
+const MealCard = ({ meal }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const kcal = Math.round(meal.macros.protein_g * 4 + meal.macros.carbs_g * 4 + meal.macros.fat_g * 9);
+
+  return (
+    <div className="bg-white border border-gray-100 rounded-[2rem] p-6 shadow-sm hover:shadow-md transition-all">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+        <div>
+          <span className="inline-block px-2 py-0.5 bg-cyan-50 text-[#0088A3] text-[9px] font-black uppercase tracking-widest rounded-full mb-1">
+            {meal.meal_type}
+          </span>
+          <h4 className="text-xl font-black text-[#003d5b]">{meal.recipe_name}</h4>
+        </div>
+        <button 
+          onClick={() => setIsOpen(!isOpen)}
+          className={`px-5 py-2 rounded-xl font-black text-[10px] transition-all ${isOpen ? 'bg-[#003d5b] text-white' : 'bg-gray-100 text-[#003d5b]'}`}
+        >
+          {isOpen ? 'CERRAR' : 'VER RECETA'}
+        </button>
+      </div>
+      
+      <div className="grid grid-cols-4 gap-2">
+        <MacroBadge label="PROT" value={meal.macros.protein_g} unit="g" colorClass="text-macro-protein" barClass="bg-macro-protein" />
+        <MacroBadge label="GRASA" value={meal.macros.fat_g} unit="g" colorClass="text-macro-fat" barClass="bg-macro-fat" />
+        <MacroBadge label="CARB" value={meal.macros.carbs_g} unit="g" colorClass="text-macro-carb" barClass="bg-macro-carb" />
+        <MacroBadge label="KCAL" value={kcal} unit="" colorClass="text-[#003d5b]" barClass="bg-gray-300" />
+      </div>
+
+      {isOpen && (
+        <div className="mt-6 pt-6 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div>
+            <h5 className="text-[10px] font-black text-[#003d5b] uppercase mb-3">Ingredientes</h5>
+            <ul className="space-y-1">
+              {meal.ingredients.map((ing, i) => (
+                <li key={i} className="text-xs bg-gray-50 p-2 rounded-lg flex justify-between">
+                  <span className="font-semibold text-gray-700">{ing.name}</span>
+                  <span className="font-black text-[#0088A3]">{ing.quantity_grams}g</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <h5 className="text-[10px] font-black text-[#003d5b] uppercase mb-3">Preparación</h5>
+            {meal.steps.map((step, i) => (
+              <p key={i} className="text-[11px] text-gray-600 mb-2 leading-relaxed flex gap-2">
+                <span className="font-black text-[#0088A3]">{i+1}.</span> {step}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --- APP PRINCIPAL ---
+
+const App = () => {
+  const [prefs, setPrefs] = useState({
+    protein: 160, fat: 70, carbs: 220, numMeals: 3, dietaryFilter: '', fridgeIngredients: '',
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [plan, setPlan] = useState(null);
+  const [usage, setUsage] = useState(null);
+  const calories = Math.round((prefs.protein * 4) + (prefs.carbs * 4) + (prefs.fat * 9));
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setPrefs(prev => ({ ...prev, [name]: (name === 'dietaryFilter' || name === 'fridgeIngredients') ? value : Number(value) }));
+  };
+
+  const handleGenerate = async (useFridge) => {
+    setLoading(true); setError(null);
+    try {
+      const result = await generateMealPlan({ ...prefs, fridgeIngredients: useFridge ? prefs.fridgeIngredients : '' });
+      setPlan(result.plan);
+      setUsage(result.usage);
+    } catch (err) {
+      setError("Fallo en la conexión con Chef-. Intenta de nuevo.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-10">
+      <header className="text-center mb-10">
+        <h1 className="text-5xl font-black text-mmx-gradient tracking-tight mb-2">Chef-</h1>
+        <p className="text-gray-500 font-medium">Nutrición Mediterránea • Gemini 2.5 Flash-Lite</p>
+      </header>
+
+      <div className="space-y-6">
+        <div className="bg-white rounded-[2rem] p-8 shadow-xl border border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="space-y-4">
+            <h2 className="text-sm font-black text-[#003d5b] uppercase tracking-widest flex items-center">
+              <span className="w-1.5 h-4 bg-mmx-gradient rounded-full mr-2"></span> Macros Diarios
+            </h2>
+            <div className="grid grid-cols-3 gap-3">
+              <Input label="PROT" name="protein" value={prefs.protein} color="text-macro-protein" onChange={handleInputChange} />
+              <Input label="FAT" name="fat" value={prefs.fat} color="text-macro-fat" onChange={handleInputChange} />
+              <Input label="CARB" name="carbs" value={prefs.carbs} color="text-macro-carb" onChange={handleInputChange} />
+            </div>
+            <div className="bg-gray-50 p-3 rounded-xl flex justify-between items-center">
+              <span className="text-[10px] font-black text-gray-400">ENERGÍA</span>
+              <span className="font-black text-[#003d5b]">{calories} kcal</span>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <h2 className="text-sm font-black text-[#003d5b] uppercase tracking-widest flex items-center">
+              <span className="w-1.5 h-4 bg-[#003d5b] rounded-full mr-2"></span> Preferencias
+            </h2>
+            <div className="grid grid-cols-2 gap-4">
+              <Select label="PLATOS" name="numMeals" value={prefs.numMeals} onChange={handleInputChange} />
+              <TextInput label="DIETA" name="dietaryFilter" value={prefs.dietaryFilter} placeholder="Ej: Vegano" onChange={handleInputChange} />
+            </div>
+            <textarea 
+              name="fridgeIngredients" 
+              value={prefs.fridgeIngredients} 
+              onChange={handleInputChange}
+              placeholder="Ingredientes en mi nevera..."
+              className="w-full p-3 bg-gray-50 border-2 border-dashed border-gray-100 rounded-xl text-xs font-medium focus:border-[#00BCC9] outline-none h-16 resize-none"
+            />
+          </div>
+        </div>
+
+        <button 
+          onClick={() => handleGenerate(true)}
+          disabled={loading}
+          className="w-full py-4 bg-mmx-gradient text-white font-black rounded-2xl shadow-lg hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-50"
+        >
+          GENERAR MI PLAN CHEF-
+        </button>
+
+        {error && <Alert message={error} onClose={() => setError(null)} />}
+
+        {usage && (
+          <div className="flex justify-center gap-4 text-[9px] font-black text-gray-400 uppercase tracking-tighter">
+            <span>Tokens: {usage.totalTokenCount}</span>
+            <span>Speed: Lite 2.5</span>
+          </div>
+        )}
+
+        {plan && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+             <h2 className="text-2xl font-black text-center text-[#003d5b] mt-10">{plan.plan_name}</h2>
+             <div className="space-y-4">
+                {plan.days[0].meals.map((meal, i) => <MealCard key={i} meal={meal} />)}
+             </div>
+             
+             <div className="bg-[#003d5b] p-8 rounded-[2rem] text-white">
+                <h4 className="text-lg font-black mb-4 flex justify-between items-center">
+                  Lista de Compra
+                  <span className="text-[9px] opacity-50">FLASH-LITE OPTIMIZED</span>
+                </h4>
+                <div className="grid grid-cols-2 gap-3">
+                  {plan.shopping_list.map((item, i) => (
+                    <div key={i} className="text-xs font-medium bg-white/10 p-2 rounded-lg">{item}</div>
+                  ))}
+                </div>
+             </div>
+          </div>
+        )}
+      </div>
+      {loading && <Loader />}
+    </div>
+  );
+};
+
+const Input = ({ label, name, value, color, onChange }) => (
+  <div className="flex flex-col">
+    <label className="text-[9px] font-black text-gray-400 mb-1">{label}</label>
+    <input type="number" name={name} value={value} onChange={onChange} className={`w-full p-2 bg-gray-50 border-2 border-gray-100 rounded-xl font-black text-sm focus:border-[#00BCC9] outline-none ${color}`} />
+  </div>
+);
+
+const TextInput = ({ label, name, value, placeholder, onChange }) => (
+  <div className="flex flex-col">
+    <label className="text-[9px] font-black text-gray-400 mb-1">{label}</label>
+    <input type="text" name={name} value={value} placeholder={placeholder} onChange={onChange} className="w-full p-2 bg-gray-50 border-2 border-gray-100 rounded-xl font-bold text-xs focus:border-[#00BCC9] outline-none" />
+  </div>
+);
+
+const Select = ({ label, name, value, onChange }) => (
+  <div className="flex flex-col">
+    <label className="text-[9px] font-black text-gray-400 mb-1">{label}</label>
+    <select name={name} value={value} onChange={onChange} className="w-full p-2 bg-gray-50 border-2 border-gray-100 rounded-xl font-bold text-xs focus:border-[#00BCC9] outline-none">
+      {[2, 3, 4, 5].map(n => <option key={n} value={n}>{n} platos</option>)}
+    </select>
+  </div>
+);
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
