@@ -1,114 +1,40 @@
+import React, { useMemo, useState } from "react";
+import { createRoot } from "react-dom/client";
 
-import React, { useState, useEffect } from 'react';
-import ReactDOM from 'react-dom/client';
-import { GoogleGenAI, Type } from "@google/genai";
+// =======================
+// CONFIG
+// =======================
+const API_ENDPOINT = "/.netlify/functions/chef"; // Netlify Functions default path
 
-// --- SERVICIO GEMINI ---
+// =======================
+// API CLIENT (Frontend)
+// =======================
+async function generateMealPlan(prefs) {
+  const res = await fetch(API_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(prefs),
+  });
 
-const generateMealPlan = async (prefs) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const model = "gemini-flash-lite-latest";
-
-  const prompt = `Plan mediterráneo 1 día: Prot:${prefs.protein}g, Gras:${prefs.fat}g, Carb:${prefs.carbs}g. ${prefs.numMeals} comidas. Restricciones: ${prefs.dietaryFilter || "N/A"}. Nevera: ${prefs.fridgeIngredients || "N/A"}. 
-  INSTRUCCIÓN: Sé ultra-conciso. Recetas simples. Máximo 2 pasos por plato. El JSON debe ser válido.`;
-
-  const responseSchema = {
-    type: Type.OBJECT,
-    properties: {
-      plan_name: { type: Type.STRING },
-      days: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            day_name: { type: Type.STRING },
-            total_macros: {
-              type: Type.OBJECT,
-              properties: {
-                protein_g: { type: Type.NUMBER },
-                fat_g: { type: Type.NUMBER },
-                carbs_g: { type: Type.NUMBER },
-              },
-              required: ["protein_g", "fat_g", "carbs_g"],
-            },
-            meals: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  meal_type: { type: Type.STRING },
-                  recipe_name: { type: Type.STRING },
-                  short_description: { type: Type.STRING },
-                  macros: {
-                    type: Type.OBJECT,
-                    properties: {
-                      protein_g: { type: Type.NUMBER },
-                      fat_g: { type: Type.NUMBER },
-                      carbs_g: { type: Type.NUMBER },
-                    },
-                    required: ["protein_g", "fat_g", "carbs_g"],
-                  },
-                  ingredients: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        name: { type: Type.STRING },
-                        quantity_grams: { type: Type.NUMBER },
-                      },
-                      required: ["name", "quantity_grams"],
-                    },
-                  },
-                  steps: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING },
-                  },
-                },
-                required: ["meal_type", "recipe_name", "macros", "ingredients", "steps"],
-              },
-            },
-          },
-          required: ["day_name", "total_macros", "meals"],
-        },
-      },
-      shopping_list: { type: Type.ARRAY, items: { type: Type.STRING } },
-      general_tips: { type: Type.ARRAY, items: { type: Type.STRING } },
-    },
-    required: ["plan_name", "days", "shopping_list", "general_tips"],
-  };
-
-  try {
-    const response = await ai.models.generateContent({
-      model,
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema,
-        maxOutputTokens: 700,
-        thinkingConfig: { thinkingBudget: 0 },
-        systemInstruction: "Eres Chef-, un asistente de nutrición mediterránea experto y eficiente. Generas planes de alimentación estructurados en JSON de forma extremadamente concisa para ahorrar recursos.",
-      },
-    });
-
-    const text = response.text;
-    if (!text) throw new Error("Respuesta vacía");
-    
-    return {
-      plan: JSON.parse(text),
-      usage: response.usageMetadata
-    };
-  } catch (error) {
-    console.error("Gemini Error:", error);
-    throw error;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = data?.error || "Error desconocido en el servidor.";
+    throw new Error(msg);
   }
-};
 
-// --- COMPONENTES ---
+  // Esperado: { plan: {...}, usage: {...} }
+  return data;
+}
 
+// =======================
+// UI COMPONENTS
+// =======================
 const Alert = ({ message, onClose }) => (
-  <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl flex items-start justify-between shadow-sm animate-in fade-in duration-300">
+  <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl flex items-start justify-between shadow-sm animate-in fade-in">
     <p className="text-sm text-red-700 font-medium">{message}</p>
-    <button onClick={onClose} className="text-red-400 hover:text-red-500">&times;</button>
+    <button onClick={onClose} className="text-red-400 hover:text-red-500" aria-label="Cerrar">
+      &times;
+    </button>
   </div>
 );
 
@@ -119,7 +45,7 @@ const Loader = () => (
       <div className="w-20 h-20 border-[6px] border-[#00BCC9] rounded-[2rem] absolute border-t-transparent animate-spin-slow"></div>
     </div>
     <h3 className="text-2xl font-black text-[#003d5b]">Chef- está cocinando tu plan...</h3>
-    <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest mt-2">Gemini 2.5 Flash-Lite Engine</p>
+    <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest mt-2">Gemini 2.5 Flash Engine</p>
   </div>
 );
 
@@ -131,7 +57,7 @@ const MacroBadge = ({ label, value, unit, colorClass, barClass }) => (
       <span className="text-[9px] font-bold text-gray-400">{unit}</span>
     </div>
     <div className="w-6 h-1 mt-2 rounded-full bg-gray-200 overflow-hidden">
-        <div className={`h-full ${barClass}`} style={{ width: '100%' }}></div>
+      <div className={`h-full ${barClass}`} style={{ width: "100%" }}></div>
     </div>
   </div>
 );
@@ -148,15 +74,21 @@ const MealCard = ({ meal }) => {
             {meal.meal_type}
           </span>
           <h4 className="text-xl font-black text-[#003d5b]">{meal.recipe_name}</h4>
+          {meal.short_description ? (
+            <p className="text-xs text-gray-500 font-medium mt-1">{meal.short_description}</p>
+          ) : null}
         </div>
-        <button 
+
+        <button
           onClick={() => setIsOpen(!isOpen)}
-          className={`px-5 py-2 rounded-xl font-black text-[10px] transition-all ${isOpen ? 'bg-[#003d5b] text-white' : 'bg-gray-100 text-[#003d5b]'}`}
+          className={`px-5 py-2 rounded-xl font-black text-[10px] transition-all ${
+            isOpen ? "bg-[#003d5b] text-white" : "bg-gray-100 text-[#003d5b]"
+          }`}
         >
-          {isOpen ? 'CERRAR' : 'VER RECETA'}
+          {isOpen ? "CERRAR" : "VER RECETA"}
         </button>
       </div>
-      
+
       <div className="grid grid-cols-4 gap-2">
         <MacroBadge label="PROT" value={meal.macros.protein_g} unit="g" colorClass="text-macro-protein" barClass="bg-macro-protein" />
         <MacroBadge label="GRASA" value={meal.macros.fat_g} unit="g" colorClass="text-macro-fat" barClass="bg-macro-fat" />
@@ -165,7 +97,7 @@ const MealCard = ({ meal }) => {
       </div>
 
       {isOpen && (
-        <div className="mt-6 pt-6 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-top-2 duration-300">
+        <div className="mt-6 pt-6 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-top-2">
           <div>
             <h5 className="text-[10px] font-black text-[#003d5b] uppercase mb-3">Ingredientes</h5>
             <ul className="space-y-1">
@@ -177,11 +109,12 @@ const MealCard = ({ meal }) => {
               ))}
             </ul>
           </div>
+
           <div>
             <h5 className="text-[10px] font-black text-[#003d5b] uppercase mb-3">Preparación</h5>
             {meal.steps.map((step, i) => (
               <p key={i} className="text-[11px] text-gray-600 mb-2 leading-relaxed flex gap-2">
-                <span className="font-black text-[#0088A3]">{i+1}.</span> {step}
+                <span className="font-black text-[#0088A3]">{i + 1}.</span> {step}
               </p>
             ))}
           </div>
@@ -191,31 +124,100 @@ const MealCard = ({ meal }) => {
   );
 };
 
-// --- APP PRINCIPAL ---
+const Input = ({ label, name, value, color, onChange }) => (
+  <div className="flex flex-col">
+    <label className="text-[9px] font-black text-gray-400 mb-1">{label}</label>
+    <input
+      type="number"
+      name={name}
+      value={value}
+      onChange={onChange}
+      min="0"
+      className={`w-full p-2 bg-gray-50 border-2 border-gray-100 rounded-xl font-black text-sm focus:border-[#00BCC9] outline-none ${color}`}
+    />
+  </div>
+);
 
+const TextInput = ({ label, name, value, placeholder, onChange }) => (
+  <div className="flex flex-col">
+    <label className="text-[9px] font-black text-gray-400 mb-1">{label}</label>
+    <input
+      type="text"
+      name={name}
+      value={value}
+      placeholder={placeholder}
+      onChange={onChange}
+      className="w-full p-2 bg-gray-50 border-2 border-gray-100 rounded-xl font-bold text-xs focus:border-[#00BCC9] outline-none"
+    />
+  </div>
+);
+
+const Select = ({ label, name, value, onChange }) => (
+  <div className="flex flex-col">
+    <label className="text-[9px] font-black text-gray-400 mb-1">{label}</label>
+    <select
+      name={name}
+      value={value}
+      onChange={onChange}
+      className="w-full p-2 bg-gray-50 border-2 border-gray-100 rounded-xl font-bold text-xs focus:border-[#00BCC9] outline-none"
+    >
+      {[2, 3, 4, 5].map((n) => (
+        <option key={n} value={n}>
+          {n} platos
+        </option>
+      ))}
+    </select>
+  </div>
+);
+
+// =======================
+// APP
+// =======================
 const App = () => {
   const [prefs, setPrefs] = useState({
-    protein: 160, fat: 70, carbs: 220, numMeals: 3, dietaryFilter: '', fridgeIngredients: '',
+    protein: 160,
+    fat: 70,
+    carbs: 220,
+    numMeals: 3,
+    dietaryFilter: "",
+    fridgeIngredients: "",
   });
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [plan, setPlan] = useState(null);
   const [usage, setUsage] = useState(null);
-  const calories = Math.round((prefs.protein * 4) + (prefs.carbs * 4) + (prefs.fat * 9));
+
+  const calories = useMemo(
+    () => Math.round(prefs.protein * 4 + prefs.carbs * 4 + prefs.fat * 9),
+    [prefs]
+  );
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setPrefs(prev => ({ ...prev, [name]: (name === 'dietaryFilter' || name === 'fridgeIngredients') ? value : Number(value) }));
+    setPrefs((prev) => ({
+      ...prev,
+      [name]: name === "dietaryFilter" || name === "fridgeIngredients" ? value : Number(value),
+    }));
   };
 
-  const handleGenerate = async (useFridge) => {
-    setLoading(true); setError(null);
+  const handleGenerate = async () => {
+    setLoading(true);
+    setError(null);
+    setPlan(null);
+    setUsage(null);
+
     try {
-      const result = await generateMealPlan({ ...prefs, fridgeIngredients: useFridge ? prefs.fridgeIngredients : '' });
+      // Validación mínima client-side
+      if ([prefs.protein, prefs.fat, prefs.carbs].some((x) => Number.isNaN(x) || x < 0)) {
+        throw new Error("Revisa tus macros: no pueden ser negativos.");
+      }
+
+      const result = await generateMealPlan({ ...prefs });
       setPlan(result.plan);
       setUsage(result.usage);
     } catch (err) {
-      setError("Fallo en la conexión con Chef-. Intenta de nuevo.");
+      setError(err?.message || "Fallo en la conexión con Chef-. Intenta de nuevo.");
     } finally {
       setLoading(false);
     }
@@ -225,7 +227,7 @@ const App = () => {
     <div className="max-w-4xl mx-auto px-4 py-10">
       <header className="text-center mb-10">
         <h1 className="text-5xl font-black text-mmx-gradient tracking-tight mb-2">Chef-</h1>
-        <p className="text-gray-500 font-medium">Nutrición Mediterránea • Gemini 2.5 Flash-Lite</p>
+        <p className="text-gray-500 font-medium">Nutrición Mediterránea • Gemini 2.5 Flash</p>
       </header>
 
       <div className="space-y-6">
@@ -234,11 +236,13 @@ const App = () => {
             <h2 className="text-sm font-black text-[#003d5b] uppercase tracking-widest flex items-center">
               <span className="w-1.5 h-4 bg-mmx-gradient rounded-full mr-2"></span> Macros Diarios
             </h2>
+
             <div className="grid grid-cols-3 gap-3">
               <Input label="PROT" name="protein" value={prefs.protein} color="text-macro-protein" onChange={handleInputChange} />
               <Input label="FAT" name="fat" value={prefs.fat} color="text-macro-fat" onChange={handleInputChange} />
               <Input label="CARB" name="carbs" value={prefs.carbs} color="text-macro-carb" onChange={handleInputChange} />
             </div>
+
             <div className="bg-gray-50 p-3 rounded-xl flex justify-between items-center">
               <span className="text-[10px] font-black text-gray-400">ENERGÍA</span>
               <span className="font-black text-[#003d5b]">{calories} kcal</span>
@@ -249,13 +253,15 @@ const App = () => {
             <h2 className="text-sm font-black text-[#003d5b] uppercase tracking-widest flex items-center">
               <span className="w-1.5 h-4 bg-[#003d5b] rounded-full mr-2"></span> Preferencias
             </h2>
+
             <div className="grid grid-cols-2 gap-4">
               <Select label="PLATOS" name="numMeals" value={prefs.numMeals} onChange={handleInputChange} />
               <TextInput label="DIETA" name="dietaryFilter" value={prefs.dietaryFilter} placeholder="Ej: Vegano" onChange={handleInputChange} />
             </div>
-            <textarea 
-              name="fridgeIngredients" 
-              value={prefs.fridgeIngredients} 
+
+            <textarea
+              name="fridgeIngredients"
+              value={prefs.fridgeIngredients}
               onChange={handleInputChange}
               placeholder="Ingredientes en mi nevera..."
               className="w-full p-3 bg-gray-50 border-2 border-dashed border-gray-100 rounded-xl text-xs font-medium focus:border-[#00BCC9] outline-none h-16 resize-none"
@@ -263,8 +269,8 @@ const App = () => {
           </div>
         </div>
 
-        <button 
-          onClick={() => handleGenerate(true)}
+        <button
+          onClick={handleGenerate}
           disabled={loading}
           className="w-full py-4 bg-mmx-gradient text-white font-black rounded-2xl shadow-lg hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-50"
         >
@@ -275,59 +281,51 @@ const App = () => {
 
         {usage && (
           <div className="flex justify-center gap-4 text-[9px] font-black text-gray-400 uppercase tracking-tighter">
-            <span>Tokens: {usage.totalTokenCount}</span>
-            <span>Speed: Lite 2.5</span>
+            <span>Tokens: {usage?.totalTokenCount ?? "?"}</span>
+            <span>Modelo: 2.5 Flash</span>
           </div>
         )}
 
         {plan && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-             <h2 className="text-2xl font-black text-center text-[#003d5b] mt-10">{plan.plan_name}</h2>
-             <div className="space-y-4">
-                {plan.days[0].meals.map((meal, i) => <MealCard key={i} meal={meal} />)}
-             </div>
-             
-             <div className="bg-[#003d5b] p-8 rounded-[2rem] text-white">
-                <h4 className="text-lg font-black mb-4 flex justify-between items-center">
-                  Lista de Compra
-                  <span className="text-[9px] opacity-50">FLASH-LITE OPTIMIZED</span>
-                </h4>
-                <div className="grid grid-cols-2 gap-3">
-                  {plan.shopping_list.map((item, i) => (
-                    <div key={i} className="text-xs font-medium bg-white/10 p-2 rounded-lg">{item}</div>
-                  ))}
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+            <h2 className="text-2xl font-black text-center text-[#003d5b] mt-10">{plan.plan_name}</h2>
+
+            <div className="space-y-4">
+              {plan?.days?.[0]?.meals?.map((meal, i) => (
+                <MealCard key={i} meal={meal} />
+              ))}
+            </div>
+
+            <div className="bg-[#003d5b] p-8 rounded-[2rem] text-white">
+              <h4 className="text-lg font-black mb-4 flex justify-between items-center">
+                Lista de Compra
+                <span className="text-[9px] opacity-50">FLASH OPTIMIZED</span>
+              </h4>
+
+              <div className="grid grid-cols-2 gap-3">
+                {(plan.shopping_list || []).map((item, i) => (
+                  <div key={i} className="text-xs font-medium bg-white/10 p-2 rounded-lg">{item}</div>
+                ))}
+              </div>
+
+              {(plan.general_tips && plan.general_tips.length > 0) ? (
+                <div className="mt-6 pt-6 border-t border-white/10">
+                  <h5 className="text-[10px] font-black uppercase opacity-80 mb-3">Tips</h5>
+                  <ul className="space-y-2">
+                    {plan.general_tips.map((t, i) => (
+                      <li key={i} className="text-xs opacity-90">• {t}</li>
+                    ))}
+                  </ul>
                 </div>
-             </div>
+              ) : null}
+            </div>
           </div>
         )}
       </div>
+
       {loading && <Loader />}
     </div>
   );
 };
 
-const Input = ({ label, name, value, color, onChange }) => (
-  <div className="flex flex-col">
-    <label className="text-[9px] font-black text-gray-400 mb-1">{label}</label>
-    <input type="number" name={name} value={value} onChange={onChange} className={`w-full p-2 bg-gray-50 border-2 border-gray-100 rounded-xl font-black text-sm focus:border-[#00BCC9] outline-none ${color}`} />
-  </div>
-);
-
-const TextInput = ({ label, name, value, placeholder, onChange }) => (
-  <div className="flex flex-col">
-    <label className="text-[9px] font-black text-gray-400 mb-1">{label}</label>
-    <input type="text" name={name} value={value} placeholder={placeholder} onChange={onChange} className="w-full p-2 bg-gray-50 border-2 border-gray-100 rounded-xl font-bold text-xs focus:border-[#00BCC9] outline-none" />
-  </div>
-);
-
-const Select = ({ label, name, value, onChange }) => (
-  <div className="flex flex-col">
-    <label className="text-[9px] font-black text-gray-400 mb-1">{label}</label>
-    <select name={name} value={value} onChange={onChange} className="w-full p-2 bg-gray-50 border-2 border-gray-100 rounded-xl font-bold text-xs focus:border-[#00BCC9] outline-none">
-      {[2, 3, 4, 5].map(n => <option key={n} value={n}>{n} platos</option>)}
-    </select>
-  </div>
-);
-
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<App />);
+createRoot(document.getElementById("root")).render(<App />);
