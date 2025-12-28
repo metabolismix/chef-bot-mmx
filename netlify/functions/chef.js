@@ -1,209 +1,222 @@
-export default async (req, context) => {
-  // --- Solo POST ---
-  if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
-    });
-  }
+// netlify/functions/chef.js
+// Node runtime (Netlify Functions). API Key SOLO en entorno: GEMINI_API_KEY (o API_KEY)
 
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method Not Allowed' }), {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
+const MODEL = "gemini-2.5-flash";
+const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
-  // --- API KEY (Netlify env) ---
-  const apiKey =
-    (globalThis?.Netlify?.env?.get && Netlify.env.get('GEMINI_API_KEY')) ||
-    process.env.GEMINI_API_KEY;
-
-  if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'Missing GEMINI_API_KEY in Netlify env vars' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  // --- Body size guard (barato y efectivo) ---
-  const raw = await req.text();
-  if (!raw || raw.length > 3500) {
-    return new Response(JSON.stringify({ error: 'Payload demasiado grande' }), {
-      status: 413,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  let body;
-  try {
-    body = JSON.parse(raw);
-  } catch {
-    return new Response(JSON.stringify({ error: 'JSON inválido' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  // --- Sanitización / clamps ---
-  const clampInt = (x, min, max, fallback) => {
-    const n = Number.isFinite(Number(x)) ? Math.round(Number(x)) : fallback;
-    return Math.max(min, Math.min(max, n));
+function jsonHeaders() {
+  return {
+    "Content-Type": "application/json",
   };
-
-  const clampStr = (s, maxLen) => {
-    if (typeof s !== 'string') return '';
-    const trimmed = s.trim();
-    return trimmed.length > maxLen ? trimmed.slice(0, maxLen) : trimmed;
-  };
-
-  const prefs = {
-    protein: clampInt(body.protein, 40, 300, 160),
-    fat: clampInt(body.fat, 20, 200, 70),
-    carbs: clampInt(body.carbs, 0, 400, 220),
-    numMeals: clampInt(body.numMeals, 2, 5, 3),
-    dietaryFilter: clampStr(body.dietaryFilter, 120),
-    fridgeIngredients: clampStr(body.fridgeIngredients, 600),
-  };
-
-  const prompt = `
-Plan mediterráneo de 1 día.
-Objetivo macros total día: PROT=${prefs.protein}g, GRASA=${prefs.fat}g, CARB=${prefs.carbs}g.
-Número de comidas EXACTO: ${prefs.numMeals}.
-Restricciones: ${prefs.dietaryFilter || "N/A"}.
-Ingredientes disponibles (si aplica): ${prefs.fridgeIngredients || "N/A"}.
-
-INSTRUCCIONES:
-- Responde SOLO con JSON válido (sin markdown, sin texto extra).
-- Recetas simples y realistas.
-- Máximo 2 pasos por plato.
-- Incluye cantidades en gramos en ingredientes.
-- Ajusta macros aproximados por comida para que el total del día sea coherente.
-
-FORMATO JSON:
-{
-  "plan_name": string,
-  "days": [{
-    "day_name": string,
-    "total_macros": {"protein_g": number, "fat_g": number, "carbs_g": number},
-    "meals": [{
-      "meal_type": string,
-      "recipe_name": string,
-      "short_description": string,
-      "macros": {"protein_g": number, "fat_g": number, "carbs_g": number},
-      "ingredients": [{"name": string, "quantity_grams": number}],
-      "steps": [string, string]
-    }]
-  }],
-  "shopping_list": [string],
-  "general_tips": [string]
 }
-`.trim();
 
-  const systemInstruction = `
-Eres Chef-, un asistente de nutrición mediterránea experto y eficiente.
-Eres ultra-conciso y optimizas coste: salida breve, sin relleno, y JSON limpio.
-`.trim();
+function pick(obj, path, fallback = undefined) {
+  try {
+    return path.split(".").reduce((acc, k) => acc?.[k], obj) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
 
-  // --- Llamada a Gemini 2.5 Flash (REST) ---
-  // Endpoint y estructura de generateContent están documentados por Google. :contentReference[oaicite:5]{index=5}
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+function extractTextFromGeminiResponse(data) {
+  const parts = data?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return "";
+  return parts.map(p => (typeof p?.text === "string" ? p.text : "")).join("");
+}
+
+function safeParseJson(text) {
+  if (!text || typeof text !== "string") throw new Error("Respuesta vacía del modelo.");
+
+  // Si viniera con basura (muy raro con JSON mode), intentamos recortar al primer/último { }.
+  const first = text.indexOf("{");
+  const last = text.lastIndexOf("}");
+  const slice = (first !== -1 && last !== -1 && last > first) ? text.slice(first, last + 1) : text;
+
+  return JSON.parse(slice);
+}
+
+function clampNumber(x, min = 0, max = 10000) {
+  const n = Number(x);
+  if (!Number.isFinite(n)) return min;
+  return Math.min(max, Math.max(min, n));
+}
+
+exports.handler = async (event) => {
+  // Solo POST
+  if (event.httpMethod === "OPTIONS") {
+    return {
+      statusCode: 204,
+      headers: {
+        ...jsonHeaders(),
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+      },
+      body: "",
+    };
+  }
+
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, headers: jsonHeaders(), body: JSON.stringify({ error: "Method Not Allowed" }) };
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+  if (!apiKey) {
+    return { statusCode: 500, headers: jsonHeaders(), body: JSON.stringify({ error: "Falta GEMINI_API_KEY (o API_KEY) en variables de entorno." }) };
+  }
+
+  let prefs;
+  try {
+    prefs = JSON.parse(event.body || "{}");
+  } catch {
+    return { statusCode: 400, headers: jsonHeaders(), body: JSON.stringify({ error: "JSON inválido en el body." }) };
+  }
+
+  const protein = clampNumber(prefs.protein, 0, 500);
+  const fat = clampNumber(prefs.fat, 0, 300);
+  const carbs = clampNumber(prefs.carbs, 0, 800);
+  const numMeals = clampNumber(prefs.numMeals, 2, 6);
+  const dietaryFilter = String(prefs.dietaryFilter || "").trim();
+  const fridgeIngredients = String(prefs.fridgeIngredients || "").trim();
+
+  if (protein <= 0 || fat <= 0 || carbs <= 0) {
+    return { statusCode: 400, headers: jsonHeaders(), body: JSON.stringify({ error: "Macros inválidos: proteína/grasas/carbos deben ser > 0." }) };
+  }
+
+  const prompt = `Genera un plan mediterráneo para 1 día con estos macros exactos:
+Proteína: ${protein}g, Grasas: ${fat}g, Carbohidratos: ${carbs}g.
+Número de comidas: ${numMeals}.
+Restricciones: ${dietaryFilter || "Ninguna"}.
+Ingredientes disponibles: ${fridgeIngredients || "Cualquiera"}.
+
+REGLAS ESTRICTAS:
+1) La suma de macros de todas las comidas debe aproximarse al objetivo diario.
+2) Instrucciones ultra breves: máximo 2 pasos por receta.
+3) Devuelve ÚNICAMENTE JSON válido (sin markdown, sin texto extra).`;
+
+  // JSON Schema (Gemini JSON mode) – estructura equivalente a la de tu app React.
+  // El Gemini API soporta generateContent y JSON mode con schema. :contentReference[oaicite:1]{index=1}
+  const responseSchema = {
+    type: "OBJECT",
+    properties: {
+      plan_name: { type: "STRING" },
+      days: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          properties: {
+            day_name: { type: "STRING" },
+            total_macros: {
+              type: "OBJECT",
+              properties: {
+                protein_g: { type: "NUMBER" },
+                fat_g: { type: "NUMBER" },
+                carbs_g: { type: "NUMBER" },
+              },
+              required: ["protein_g", "fat_g", "carbs_g"],
+            },
+            meals: {
+              type: "ARRAY",
+              items: {
+                type: "OBJECT",
+                properties: {
+                  meal_type: { type: "STRING" },
+                  recipe_name: { type: "STRING" },
+                  macros: {
+                    type: "OBJECT",
+                    properties: {
+                      protein_g: { type: "NUMBER" },
+                      fat_g: { type: "NUMBER" },
+                      carbs_g: { type: "NUMBER" },
+                    },
+                    required: ["protein_g", "fat_g", "carbs_g"],
+                  },
+                  ingredients: {
+                    type: "ARRAY",
+                    items: {
+                      type: "OBJECT",
+                      properties: {
+                        name: { type: "STRING" },
+                        quantity_grams: { type: "NUMBER" },
+                      },
+                      required: ["name", "quantity_grams"],
+                    },
+                  },
+                  steps: { type: "ARRAY", items: { type: "STRING" } },
+                },
+                required: ["meal_type", "recipe_name", "macros", "ingredients", "steps"],
+              },
+            },
+          },
+          required: ["day_name", "total_macros", "meals"],
+        },
+      },
+      shopping_list: { type: "ARRAY", items: { type: "STRING" } },
+      general_tips: { type: "ARRAY", items: { type: "STRING" } },
+    },
+    required: ["plan_name", "days", "shopping_list", "general_tips"],
+  };
+
+  const systemInstruction =
+    "Eres Chef-, un sistema de optimización nutricional mediterránea. " +
+    "Tu objetivo es crear planes deliciosos y exactos usando el menor número de tokens posible. " +
+    "No incluyas texto fuera del JSON.";
 
   const payload = {
-    contents: [{ parts: [{ text: prompt }] }],
     systemInstruction: { parts: [{ text: systemInstruction }] },
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: {
-      responseMimeType: 'application/json', // JSON mode :contentReference[oaicite:6]{index=6}
-      maxOutputTokens: 700,
-      temperature: 0.4,
+      temperature: 0.2,
+      maxOutputTokens: 1000,
+      responseMimeType: "application/json",
+      responseSchema,
     },
   };
 
-  let geminiJson;
   try {
-    const resp = await fetch(url, {
-      method: 'POST',
+    const resp = await fetch(ENDPOINT, {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
+        ...jsonHeaders(),
+        "x-goog-api-key": apiKey,
       },
       body: JSON.stringify(payload),
     });
 
-    geminiJson = await resp.json();
+    const data = await resp.json().catch(() => ({}));
 
     if (!resp.ok) {
-      const msg = geminiJson?.error?.message || 'Error llamando a Gemini';
-      return new Response(JSON.stringify({ error: msg }), {
-        status: 502,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      const msg =
+        pick(data, "error.message") ||
+        pick(data, "message") ||
+        `Gemini API error (${resp.status}).`;
+      return {
+        statusCode: resp.status,
+        headers: jsonHeaders(),
+        body: JSON.stringify({ error: msg }),
+      };
     }
-  } catch (e) {
-    return new Response(JSON.stringify({ error: 'Fallo de red hacia Gemini' }), {
-      status: 502,
-      headers: { 'Content-Type': 'application/json' },
-    });
+
+    const text = extractTextFromGeminiResponse(data);
+    const plan = safeParseJson(text);
+
+    const usageMetadata = data?.usageMetadata || {};
+    const usage = {
+      promptTokenCount: Number(usageMetadata.promptTokenCount || 0),
+      candidatesTokenCount: Number(usageMetadata.candidatesTokenCount || 0),
+      totalTokenCount: Number(usageMetadata.totalTokenCount || 0),
+    };
+
+    return {
+      statusCode: 200,
+      headers: jsonHeaders(),
+      body: JSON.stringify({ plan, usage }),
+    };
+  } catch (err) {
+    return {
+      statusCode: 500,
+      headers: jsonHeaders(),
+      body: JSON.stringify({ error: `Fallo interno en Chef- Function: ${err?.message || "unknown"}` }),
+    };
   }
-
-  // --- Extraer texto ---
-  const text =
-    geminiJson?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('')?.trim() || '';
-
-  if (!text) {
-    return new Response(JSON.stringify({ error: 'Respuesta vacía de Gemini' }), {
-      status: 502,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  // --- Parse JSON con salvavidas ---
-  const safeParse = (t) => {
-    try { return JSON.parse(t); } catch {}
-    const start = t.indexOf('{');
-    const end = t.lastIndexOf('}');
-    if (start >= 0 && end > start) {
-      const slice = t.slice(start, end + 1);
-      try { return JSON.parse(slice); } catch {}
-    }
-    return null;
-  };
-
-  const plan = safeParse(text);
-  if (!plan) {
-    return new Response(JSON.stringify({ error: 'Gemini devolvió JSON inválido' }), {
-      status: 502,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  // --- Normalización mínima: 2 pasos máximo y nº comidas exacto ---
-  try {
-    const day0 = plan?.days?.[0];
-    if (day0?.meals?.length) {
-      // Ajustar nº de comidas exacto
-      day0.meals = day0.meals.slice(0, prefs.numMeals);
-
-      // Forzar 2 pasos máximo
-      day0.meals = day0.meals.map(m => ({
-        ...m,
-        steps: Array.isArray(m.steps) ? m.steps.slice(0, 2) : [],
-      }));
-    }
-  } catch {
-    // si falla, devolvemos igual; pero normalmente no falla
-  }
-
-  return new Response(JSON.stringify({ plan, usage: geminiJson?.usageMetadata || null }), {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-store',
-      'Access-Control-Allow-Origin': '*',
-    },
-  });
 };
