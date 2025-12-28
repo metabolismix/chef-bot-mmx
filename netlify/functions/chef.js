@@ -1,222 +1,286 @@
-// netlify/functions/chef.js
-// Node runtime (Netlify Functions). API Key SOLO en entorno: GEMINI_API_KEY (o API_KEY)
+/**
+ * Netlify Function: netlify/functions/chef.js
+ * Requiere env var: GEMINI_API_KEY (o GOOGLE_API_KEY)
+ */
 
 const MODEL = "gemini-2.5-flash";
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
-function jsonHeaders() {
+function jsonResponse(statusCode, obj) {
   return {
-    "Content-Type": "application/json",
+    statusCode,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+    body: JSON.stringify(obj),
   };
 }
 
-function pick(obj, path, fallback = undefined) {
-  try {
-    return path.split(".").reduce((acc, k) => acc?.[k], obj) ?? fallback;
-  } catch {
-    return fallback;
+function safeParseJSON(str) {
+  // 1) parse directo
+  try { return { ok: true, data: JSON.parse(str) }; } catch (_) {}
+
+  // 2) intentar extraer el primer {...} completo
+  const first = str.indexOf("{");
+  const last = str.lastIndexOf("}");
+  if (first !== -1 && last !== -1 && last > first) {
+    const slice = str.slice(first, last + 1);
+    try { return { ok: true, data: JSON.parse(slice) }; } catch (_) {}
   }
+  return { ok: false };
 }
 
-function extractTextFromGeminiResponse(data) {
-  const parts = data?.candidates?.[0]?.content?.parts;
-  if (!Array.isArray(parts)) return "";
-  return parts.map(p => (typeof p?.text === "string" ? p.text : "")).join("");
-}
-
-function safeParseJson(text) {
-  if (!text || typeof text !== "string") throw new Error("Respuesta vacía del modelo.");
-
-  // Si viniera con basura (muy raro con JSON mode), intentamos recortar al primer/último { }.
-  const first = text.indexOf("{");
-  const last = text.lastIndexOf("}");
-  const slice = (first !== -1 && last !== -1 && last > first) ? text.slice(first, last + 1) : text;
-
-  return JSON.parse(slice);
-}
-
-function clampNumber(x, min = 0, max = 10000) {
-  const n = Number(x);
+function clamp(n, min, max) {
+  n = Number(n);
   if (!Number.isFinite(n)) return min;
-  return Math.min(max, Math.max(min, n));
+  return Math.max(min, Math.min(max, n));
+}
+
+function kcalFromMacros(p, c, f) {
+  return Math.round(p * 4 + c * 4 + f * 9);
+}
+
+function buildSchema(numMeals) {
+  // Schema suficientemente estricto para evitar “strings rotas”, pero no tan frágil que rompa generación.
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      plan_name: { type: "string" },
+      days: {
+        type: "array",
+        minItems: 1,
+        maxItems: 1,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            day_name: { type: "string" },
+            total_macros: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                protein_g: { type: "number" },
+                fat_g: { type: "number" },
+                carbs_g: { type: "number" }
+              },
+              required: ["protein_g", "fat_g", "carbs_g"]
+            },
+            meals: {
+              type: "array",
+              minItems: numMeals,
+              maxItems: numMeals,
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  meal_type: { type: "string" },
+                  recipe_name: { type: "string" },
+                  macros: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      protein_g: { type: "number" },
+                      fat_g: { type: "number" },
+                      carbs_g: { type: "number" }
+                    },
+                    required: ["protein_g", "fat_g", "carbs_g"]
+                  },
+                  ingredients: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      additionalProperties: false,
+                      properties: {
+                        name: { type: "string" },
+                        quantity_grams: { type: "number" }
+                      },
+                      required: ["name", "quantity_grams"]
+                    }
+                  },
+                  steps: {
+                    type: "array",
+                    maxItems: 2,
+                    items: { type: "string" }
+                  }
+                },
+                required: ["meal_type", "recipe_name", "macros", "ingredients", "steps"]
+              }
+            }
+          },
+          required: ["day_name", "total_macros", "meals"]
+        }
+      },
+      shopping_list: { type: "array", items: { type: "string" } },
+      general_tips: { type: "array", items: { type: "string" } }
+    },
+    required: ["plan_name", "days", "shopping_list", "general_tips"]
+  };
+}
+
+async function geminiCall({ apiKey, prompt, responseJsonSchema, maxOutputTokens }) {
+  const body = {
+    contents: [
+      { role: "user", parts: [{ text: prompt }] }
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseJsonSchema,
+      temperature: 0.5,
+      maxOutputTokens
+    }
+  };
+
+  const res = await fetch(ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey
+    },
+    body: JSON.stringify(body)
+  });
+
+  const raw = await res.text();
+  if (!res.ok) {
+    // Intentar devolver algo útil
+    let msg = raw;
+    try {
+      const j = JSON.parse(raw);
+      msg = j?.error?.message || raw;
+    } catch (_) {}
+    throw new Error(msg);
+  }
+
+  const data = JSON.parse(raw);
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  const usage = data?.usageMetadata ?? null;
+
+  return { text, usage };
 }
 
 exports.handler = async (event) => {
-  // Solo POST
-  if (event.httpMethod === "OPTIONS") {
-    return {
-      statusCode: 204,
-      headers: {
-        ...jsonHeaders(),
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-      },
-      body: "",
-    };
-  }
-
   if (event.httpMethod !== "POST") {
-    return { statusCode: 405, headers: jsonHeaders(), body: JSON.stringify({ error: "Method Not Allowed" }) };
+    return jsonResponse(405, { ok: false, error: "Método no permitido" });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) {
-    return { statusCode: 500, headers: jsonHeaders(), body: JSON.stringify({ error: "Falta GEMINI_API_KEY (o API_KEY) en variables de entorno." }) };
+    return jsonResponse(500, {
+      ok: false,
+      error: "Falta la variable de entorno GEMINI_API_KEY (o GOOGLE_API_KEY) en Netlify."
+    });
   }
 
-  let prefs;
+  let payload;
   try {
-    prefs = JSON.parse(event.body || "{}");
-  } catch {
-    return { statusCode: 400, headers: jsonHeaders(), body: JSON.stringify({ error: "JSON inválido en el body." }) };
+    payload = JSON.parse(event.body || "{}");
+  } catch (e) {
+    return jsonResponse(400, { ok: false, error: "Body JSON inválido." });
   }
 
-  const protein = clampNumber(prefs.protein, 0, 500);
-  const fat = clampNumber(prefs.fat, 0, 300);
-  const carbs = clampNumber(prefs.carbs, 0, 800);
-  const numMeals = clampNumber(prefs.numMeals, 2, 6);
-  const dietaryFilter = String(prefs.dietaryFilter || "").trim();
-  const fridgeIngredients = String(prefs.fridgeIngredients || "").trim();
+  const mode = (payload.mode === "fridge") ? "fridge" : "ideal";
+  const targets = payload.targets || {};
+  const numMeals = clamp(payload.numMeals, 3, 5);
 
-  if (protein <= 0 || fat <= 0 || carbs <= 0) {
-    return { statusCode: 400, headers: jsonHeaders(), body: JSON.stringify({ error: "Macros inválidos: proteína/grasas/carbos deben ser > 0." }) };
+  const protein = clamp(targets.protein_g, 0, 400);
+  const fat = clamp(targets.fat_g, 0, 200);
+  const carbs = clamp(targets.carbs_g, 0, 600);
+
+  const filter = String(payload.filter || "").trim().slice(0, 120);
+  const fridge = String(payload.fridge || "").trim().slice(0, 1200);
+
+  const totalKcal = kcalFromMacros(protein, carbs, fat);
+
+  if (mode === "fridge" && fridge.length < 3) {
+    return jsonResponse(400, { ok: false, error: "Falta texto en NEVERA para cocinar con tu nevera." });
   }
 
-  const prompt = `Genera un plan mediterráneo para 1 día con estos macros exactos:
-Proteína: ${protein}g, Grasas: ${fat}g, Carbohidratos: ${carbs}g.
-Número de comidas: ${numMeals}.
-Restricciones: ${dietaryFilter || "Ninguna"}.
-Ingredientes disponibles: ${fridgeIngredients || "Cualquiera"}.
+  const schema = buildSchema(numMeals);
 
-REGLAS ESTRICTAS:
-1) La suma de macros de todas las comidas debe aproximarse al objetivo diario.
-2) Instrucciones ultra breves: máximo 2 pasos por receta.
-3) Devuelve ÚNICAMENTE JSON válido (sin markdown, sin texto extra).`;
+  const instructions = [
+    "Eres un chef mediterráneo pragmático. Devuelve SOLO un JSON válido y nada más.",
+    "Planifica 1 día con EXACTAMENTE el número de platos indicado.",
+    "Ajusta macros aproximados al objetivo diario total; por plato reparte de forma razonable.",
+    "Ingredientes en gramos (quantity_grams). Preparación en máximo 2 pasos por plato.",
+    "Recetas realistas, sin florituras, con ingredientes comunes en España.",
+  ];
 
-  // JSON Schema (Gemini JSON mode) – estructura equivalente a la de tu app React.
-  // El Gemini API soporta generateContent y JSON mode con schema. :contentReference[oaicite:1]{index=1}
-  const responseSchema = {
-    type: "OBJECT",
-    properties: {
-      plan_name: { type: "STRING" },
-      days: {
-        type: "ARRAY",
-        items: {
-          type: "OBJECT",
-          properties: {
-            day_name: { type: "STRING" },
-            total_macros: {
-              type: "OBJECT",
-              properties: {
-                protein_g: { type: "NUMBER" },
-                fat_g: { type: "NUMBER" },
-                carbs_g: { type: "NUMBER" },
-              },
-              required: ["protein_g", "fat_g", "carbs_g"],
-            },
-            meals: {
-              type: "ARRAY",
-              items: {
-                type: "OBJECT",
-                properties: {
-                  meal_type: { type: "STRING" },
-                  recipe_name: { type: "STRING" },
-                  macros: {
-                    type: "OBJECT",
-                    properties: {
-                      protein_g: { type: "NUMBER" },
-                      fat_g: { type: "NUMBER" },
-                      carbs_g: { type: "NUMBER" },
-                    },
-                    required: ["protein_g", "fat_g", "carbs_g"],
-                  },
-                  ingredients: {
-                    type: "ARRAY",
-                    items: {
-                      type: "OBJECT",
-                      properties: {
-                        name: { type: "STRING" },
-                        quantity_grams: { type: "NUMBER" },
-                      },
-                      required: ["name", "quantity_grams"],
-                    },
-                  },
-                  steps: { type: "ARRAY", items: { type: "STRING" } },
-                },
-                required: ["meal_type", "recipe_name", "macros", "ingredients", "steps"],
-              },
-            },
-          },
-          required: ["day_name", "total_macros", "meals"],
-        },
-      },
-      shopping_list: { type: "ARRAY", items: { type: "STRING" } },
-      general_tips: { type: "ARRAY", items: { type: "STRING" } },
-    },
-    required: ["plan_name", "days", "shopping_list", "general_tips"],
-  };
+  if (filter) instructions.push(`Restricción/filtro: ${filter}`);
+  if (mode === "fridge") {
+    instructions.push("Modo NEVERA: prioriza usar lo disponible. Si falta algo, añade mínimos complementos en la lista de compra.");
+    instructions.push(`Nevera disponible: ${fridge}`);
+  }
 
-  const systemInstruction =
-    "Eres Chef-, un sistema de optimización nutricional mediterránea. " +
-    "Tu objetivo es crear planes deliciosos y exactos usando el menor número de tokens posible. " +
-    "No incluyas texto fuera del JSON.";
+  const prompt = `
+OBJETIVO DIARIO (aprox):
+- Proteína: ${protein} g
+- Grasas: ${fat} g
+- Carbos: ${carbs} g
+- Calorías estimadas: ${totalKcal} kcal
+- Platos/día: ${numMeals}
 
-  const payload = {
-    systemInstruction: { parts: [{ text: systemInstruction }] },
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 0.2,
-      maxOutputTokens: 1000,
-      responseMimeType: "application/json",
-      responseSchema,
-    },
-  };
+INSTRUCCIONES:
+${instructions.map(x => `- ${x}`).join("\n")}
+
+FORMATO:
+- Responde con un JSON que cumpla el schema.
+- Incluye:
+  - plan_name (string)
+  - days[0].day_name (string)
+  - days[0].total_macros (protein_g, fat_g, carbs_g)
+  - days[0].meals (array de ${numMeals} platos)
+  - shopping_list (array)
+  - general_tips (array)
+`.trim();
 
   try {
-    const resp = await fetch(ENDPOINT, {
-      method: "POST",
-      headers: {
-        ...jsonHeaders(),
-        "x-goog-api-key": apiKey,
-      },
-      body: JSON.stringify(payload),
+    // 1ª llamada (principal)
+    const first = await geminiCall({
+      apiKey,
+      prompt,
+      responseJsonSchema: schema,
+      maxOutputTokens: 1200
     });
 
-    const data = await resp.json().catch(() => ({}));
+    let parsed = safeParseJSON(first.text);
+    if (!parsed.ok) {
+      // 2ª llamada: reparación
+      const repairPrompt = `
+Tu salida anterior NO era JSON válido. Devuelve SOLO un JSON válido que cumpla el schema.
+Salida anterior (para reparar):
+${first.text}
+`.trim();
 
-    if (!resp.ok) {
-      const msg =
-        pick(data, "error.message") ||
-        pick(data, "message") ||
-        `Gemini API error (${resp.status}).`;
-      return {
-        statusCode: resp.status,
-        headers: jsonHeaders(),
-        body: JSON.stringify({ error: msg }),
-      };
+      const second = await geminiCall({
+        apiKey,
+        prompt: repairPrompt,
+        responseJsonSchema: schema,
+        maxOutputTokens: 1200
+      });
+
+      parsed = safeParseJSON(second.text);
+      if (!parsed.ok) {
+        return jsonResponse(500, {
+          ok: false,
+          error: "El modelo devolvió una respuesta no parseable incluso tras reparación."
+        });
+      }
+
+      return jsonResponse(200, {
+        ok: true,
+        plan: parsed.data,
+        usage: second.usage || first.usage || null
+      });
     }
 
-    const text = extractTextFromGeminiResponse(data);
-    const plan = safeParseJson(text);
-
-    const usageMetadata = data?.usageMetadata || {};
-    const usage = {
-      promptTokenCount: Number(usageMetadata.promptTokenCount || 0),
-      candidatesTokenCount: Number(usageMetadata.candidatesTokenCount || 0),
-      totalTokenCount: Number(usageMetadata.totalTokenCount || 0),
-    };
-
-    return {
-      statusCode: 200,
-      headers: jsonHeaders(),
-      body: JSON.stringify({ plan, usage }),
-    };
-  } catch (err) {
-    return {
-      statusCode: 500,
-      headers: jsonHeaders(),
-      body: JSON.stringify({ error: `Fallo interno en Chef- Function: ${err?.message || "unknown"}` }),
-    };
+    return jsonResponse(200, {
+      ok: true,
+      plan: parsed.data,
+      usage: first.usage || null
+    });
+  } catch (e) {
+    const msg = String(e?.message || "Error desconocido");
+    return jsonResponse(500, { ok: false, error: msg });
   }
 };
