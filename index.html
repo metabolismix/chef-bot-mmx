@@ -2,621 +2,505 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Chef-Bot</title>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+
   <style>
     :root{
-      --bg:#f4f7fb;
+      --bg:#f3f6fb;
       --card:#ffffff;
-      --muted:#7a8799;
       --text:#0f172a;
-      --line:#e7edf5;
-      --shadow: 0 20px 60px rgba(15, 23, 42, .08);
-      --p:#20c997;   /* proteína */
-      --f:#7c3aed;   /* grasas */
-      --c:#0ea5e9;   /* carbs */
-      --btn:#0ea5e9;
-      --btn2:#20c997;
-      --danger:#ef4444;
-      --warnbg:#fff1f2;
+      --muted:#64748b;
+      --line:#e7eef6;
+
+      --p:#2dd4bf;   /* proteína */
+      --f:#8b5cf6;   /* grasas */
+      --c:#38bdf8;   /* carbs */
+
+      --shadow: 0 24px 70px rgba(15, 23, 42, .08);
+      --shadow2: 0 14px 40px rgba(15, 23, 42, .10);
+
+      --r:28px;
     }
+
     *{box-sizing:border-box}
     html,body{height:100%}
     body{
       margin:0;
-      font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-      background: radial-gradient(1200px 700px at 20% 10%, rgba(14,165,233,.10), transparent 60%),
-                  radial-gradient(900px 500px at 70% 20%, rgba(32,201,151,.10), transparent 55%),
-                  var(--bg);
+      font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       color:var(--text);
-    }
-    .wrap{
-      max-width:1100px;
-      margin:0 auto;
-      padding:18px 18px 26px;
-    }
-    .topbar{
-      display:flex;
-      align-items:flex-start;
-      justify-content:space-between;
-      gap:14px;
-      margin-bottom:12px;
-    }
-    .brand h1{
-      font-size:26px;
-      line-height:1.1;
-      margin:0;
-      letter-spacing:-.02em;
-    }
-    .brand p{
-      margin:6px 0 0;
-      color:var(--muted);
-      font-size:13px;
-      line-height:1.3;
-    }
-    .meta{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      justify-content:flex-end;
-      flex-wrap:wrap;
-    }
-    .chip{
-      border:1px solid var(--line);
-      background:rgba(255,255,255,.75);
-      backdrop-filter: blur(6px);
-      padding:6px 10px;
-      border-radius:999px;
-      font-size:12px;
-      color:#334155;
+      background:
+        radial-gradient(900px 400px at 10% 10%, rgba(56,189,248,.18), transparent 55%),
+        radial-gradient(700px 350px at 90% 30%, rgba(139,92,246,.16), transparent 55%),
+        radial-gradient(900px 500px at 50% 100%, rgba(45,212,191,.14), transparent 60%),
+        var(--bg);
     }
 
-    .card{
-      background:var(--card);
-      border:1px solid rgba(231,237,245,.9);
-      border-radius:34px;
-      box-shadow:var(--shadow);
-      padding:18px;
+    .wrap{
+      max-width: 1060px;
+      margin: 26px auto 40px;
+      padding: 0 18px;
+    }
+
+    header{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      align-items:center;
+      margin-bottom: 16px;
+    }
+    header h1{
+      margin:0;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      font-size: 30px;
+      line-height: 1.05;
+    }
+    header p{
+      margin:0;
+      color:var(--muted);
+      font-size: 13.5px;
+      line-height: 1.2;
+      font-weight: 500;
+    }
+
+    .panel{
+      background: var(--card);
+      border: 1px solid rgba(231,238,246,.9);
+      border-radius: var(--r);
+      box-shadow: var(--shadow);
+      padding: 22px 22px 18px;
     }
 
     .grid{
       display:grid;
       grid-template-columns: 1.05fr .95fr;
-      gap:16px;
-    }
-    @media (max-width: 920px){
-      .grid{grid-template-columns:1fr}
+      gap: 18px;
     }
 
-    .sectionHead{
+    .section-title{
       display:flex;
       align-items:center;
       gap:10px;
-      margin-bottom:10px;
-      padding-left:2px;
-    }
-    .barMark{
-      width:6px;height:18px;border-radius:999px;background:#111827;
-      opacity:.9;
-    }
-    .barMark.p{background:var(--p)}
-    .barMark.f{background:var(--f)}
-    .barMark.c{background:var(--c)}
-    .sectionHead h2{
-      margin:0;
-      font-size:12px;
-      letter-spacing:.22em;
-      text-transform:uppercase;
-      color:#0b1220;
-    }
-
-    .pills{
-      display:grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap:10px;
-      margin-bottom:12px;
+      margin-bottom: 12px;
+      user-select:none;
     }
     .pill{
-      border:1px solid var(--line);
-      background:linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
-      border-radius:999px;
-      padding:10px 12px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      min-height:54px;
-      box-shadow: 0 6px 18px rgba(15,23,42,.05) inset;
+      width:10px;height:26px;border-radius: 999px;
+      background: linear-gradient(180deg, rgba(15,23,42,.9), rgba(15,23,42,.35));
+      opacity:.9;
     }
-    .pill label{
-      font-size:11px;
-      letter-spacing:.18em;
-      text-transform:uppercase;
-      color:#6b7280;
-      white-space:nowrap;
+    .pill.p{ background: linear-gradient(180deg, rgba(45,212,191,1), rgba(45,212,191,.45)); }
+    .section-title h2{
+      margin:0;
+      font-size: 13px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      font-weight: 800;
+      color: #0b1b2b;
+      line-height: 1.1;
     }
-    .pill .val{
-      display:flex; align-items:baseline; gap:8px;
-      margin-left:auto;
-    }
-    .pill input{
-      width:90px;
-      border:none;
-      outline:none;
-      text-align:right;
-      font-size:22px;
-      font-weight:800;
-      background:transparent;
-      color:var(--text);
-      padding:0;
-    }
-    .pill .unit{font-size:12px;color:#94a3b8;font-weight:700}
-    input[type=number]::-webkit-outer-spin-button,
-    input[type=number]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
-    input[type=number]{ -moz-appearance:textfield; }
 
-    .calBox{
-      border:1px solid var(--line);
-      border-radius:24px;
-      padding:14px 14px 12px;
+    .macro-row{
+      display:grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .field{
+      background: rgba(243,246,251,.55);
+      border: 1px solid rgba(231,238,246,.9);
+      border-radius: 18px;
+      padding: 10px 12px;
+      min-height: 62px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      gap: 6px;
+    }
+    .label{
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .10em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      line-height: 1.1;
+    }
+    .inputline{
+      display:flex;
+      align-items:baseline;
+      gap: 8px;
+    }
+    input[type="number"], input[type="text"], select{
+      width: 100%;
+      border: none;
+      outline: none;
+      background: transparent;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      padding: 0;
+      line-height: 1.1;
+      color: var(--text);
+    }
+    input[type="text"]{
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      padding-top: 2px;
+    }
+    select{
+      font-size: 16px;
+      font-weight: 800;
+      cursor:pointer;
+    }
+    .unit{
+      font-size: 12px;
+      color:#94a3b8;
+      font-weight: 800;
+      letter-spacing: .10em;
+      text-transform: uppercase;
+      line-height: 1.1;
+    }
+
+    .pval{ color: var(--p); }
+    .fval{ color: var(--f); }
+    .cval{ color: var(--c); }
+
+    .kcal{
+      margin-top: 14px;
+      background: rgba(243,246,251,.55);
+      border: 1px solid rgba(231,238,246,.9);
+      border-radius: 22px;
+      padding: 14px 16px;
       display:flex;
       align-items:center;
       justify-content:space-between;
-      gap:12px;
-      background:linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+      gap: 14px;
     }
-    .calLeft .kLabel{
-      font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:#94a3b8;
-      margin-bottom:6px;
-      font-weight:700;
-    }
-    .calLeft .kNum{
-      font-size:42px;
-      line-height:1;
-      font-weight:900;
-      letter-spacing:-.03em;
-    }
-    .calLeft .kUnit{
-      margin-top:4px;
-      font-size:12px;
-      color:#a3afbf;
-      font-weight:700;
-      letter-spacing:.14em;
-      text-transform:uppercase;
-    }
-    .bar{
-      width:52%;
-      min-width:220px;
-      height:12px;
-      border-radius:999px;
-      overflow:hidden;
-      border:1px solid rgba(231,237,245,.9);
-      background:#eef2f7;
+    .kcal-left{
       display:flex;
+      flex-direction:column;
+      gap: 2px;
+      min-width: 150px;
+    }
+    .kcal-left .big{
+      font-size: 34px;
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      line-height: 1.0;
+    }
+    .kcal-left .small{
+      font-size: 12px;
+      color:#94a3b8;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      line-height: 1.1;
+    }
+
+    .bar{
+      flex:1;
+      height: 10px;
+      background: rgba(15,23,42,.06);
+      border-radius: 999px;
+      overflow:hidden;
+      display:flex;
+      min-width: 160px;
     }
     .seg{height:100%}
-    .seg.p{background:var(--p)}
-    .seg.f{background:var(--f)}
-    .seg.c{background:var(--c)}
-    @media (max-width: 520px){
-      .calBox{flex-direction:column; align-items:flex-start}
-      .bar{width:100%}
-    }
+    .seg.p{background: var(--p)}
+    .seg.f{background: var(--f)}
+    .seg.c{background: var(--c)}
 
-    .prefsRow{
+    .prefs{
       display:grid;
       grid-template-columns: 1fr 1fr;
-      gap:10px;
-      margin-bottom:10px;
+      gap: 12px;
     }
-    @media (max-width: 520px){
-      .prefsRow{grid-template-columns:1fr}
-    }
-    .field{
-      border:1px solid var(--line);
-      background:linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
-      border-radius:999px;
-      padding:10px 12px;
-      display:flex;
-      align-items:center;
-      gap:10px;
-      min-height:48px;
-    }
-    .field label{
-      font-size:11px;
-      letter-spacing:.18em;
-      text-transform:uppercase;
-      color:#94a3b8;
-      font-weight:700;
-      white-space:nowrap;
-    }
-    .field select, .field input{
-      border:none;
-      outline:none;
-      width:100%;
-      font-size:14px;
-      background:transparent;
-      color:var(--text);
-    }
-    .textareaWrap{
-      margin-top:8px;
-    }
-    .textareaWrap label{
-      display:block;
-      font-size:11px;
-      letter-spacing:.18em;
-      text-transform:uppercase;
-      color:#94a3b8;
-      font-weight:800;
-      margin:8px 0 8px;
-      padding-left:2px;
-    }
-    textarea{
-      width:100%;
-      min-height:110px;
-      resize:vertical;
-      border-radius:22px;
-      border:1px dashed #d8e2ef;
-      background:#fbfdff;
-      padding:12px 14px;
-      outline:none;
-      font-size:14px;
-      line-height:1.35;
-    }
-    textarea:focus{border-style:solid;border-color:#cfe2ff}
 
     .actions{
-      display:grid;
-      grid-template-columns: 1fr 1.6fr;
-      gap:12px;
-      margin-top:14px;
+      margin-top: 16px;
+      display:flex;
+      gap: 12px;
+      justify-content:flex-end;
+      align-items:center;
     }
-    @media (max-width: 720px){
-      .actions{grid-template-columns:1fr}
-    }
+
     .btn{
       border:none;
       cursor:pointer;
-      border-radius:999px;
-      padding:14px 16px;
-      font-weight:800;
-      letter-spacing:.08em;
-      text-transform:uppercase;
-      font-size:12px;
-      transition:transform .06s ease, opacity .2s ease;
-      display:flex;
-      justify-content:center;
-      align-items:center;
-      gap:10px;
+      border-radius: 999px;
+      padding: 14px 18px;
+      font-size: 14px;
+      font-weight: 900;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      transition: transform .08s ease, filter .08s ease, opacity .08s ease;
       user-select:none;
     }
-    .btn:active{transform:translateY(1px)}
-    .btn.secondary{
-      background:#eef2f7;
-      color:#334155;
-      border:1px solid #e3e9f2;
+    .btn:active{ transform: translateY(1px); }
+    .btn-primary{
+      flex:1;
+      background: linear-gradient(90deg, rgba(45,212,191,1), rgba(56,189,248,1));
+      color: white;
+      box-shadow: var(--shadow2);
+      min-height: 54px;
     }
-    .btn.primary{
-      background: linear-gradient(90deg, var(--btn2), var(--btn));
-      color:white;
-      box-shadow: 0 18px 40px rgba(14,165,233,.20);
+    .btn-primary:hover{ filter: brightness(1.02); }
+    .btn-primary:disabled{
+      opacity: .65;
+      cursor:not-allowed;
+      filter:none;
+      transform:none;
     }
-    .btn[disabled]{opacity:.55; cursor:not-allowed}
 
-    .alert{
-      margin-top:12px;
-      border-radius:16px;
-      border:1px solid rgba(239,68,68,.28);
-      background:var(--warnbg);
-      color:#7f1d1d;
-      padding:10px 12px;
+    .status{
+      margin-top: 12px;
       display:none;
-      align-items:flex-start;
-      gap:10px;
-      font-size:13px;
-      line-height:1.25;
-    }
-    .alert strong{display:block; margin-bottom:2px}
-    .alert .x{
-      margin-left:auto;
-      border:none;
-      background:transparent;
-      cursor:pointer;
-      font-size:18px;
-      line-height:1;
-      color:#b91c1c;
+      border-radius: 16px;
+      border: 1px solid rgba(231,238,246,.9);
+      background: rgba(243,246,251,.55);
+      padding: 10px 12px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.25;
     }
 
-    /* Output */
-    .out{
-      margin-top:14px;
+    .error{
+      margin-top: 12px;
+      display:none;
+      border-radius: 16px;
+      border: 1px solid rgba(239, 68, 68, .25);
+      background: rgba(239, 68, 68, .07);
+      padding: 10px 12px;
+      color: #b91c1c;
+      font-size: 13px;
+      line-height: 1.25;
+      font-weight: 650;
     }
-    .outHead{
-      display:flex; align-items:flex-end; justify-content:space-between; gap:10px;
-      margin:14px 2px 10px;
+
+    .results{
+      margin-top: 14px;
+      display:none;
+      gap: 12px;
     }
-    .outHead h3{
-      margin:0;
-      font-size:16px;
-      letter-spacing:-.01em;
+    .results h3{
+      margin: 0 0 8px;
+      font-size: 13px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      font-weight: 900;
+      color: #0b1b2b;
     }
-    .smallMuted{font-size:12px;color:var(--muted)}
-    .planGrid{
+
+    .meal-grid{
       display:grid;
       grid-template-columns: repeat(3, 1fr);
-      gap:10px;
+      gap: 12px;
     }
-    @media (max-width: 920px){
-      .planGrid{grid-template-columns:1fr}
+    .meal{
+      background: rgba(243,246,251,.55);
+      border: 1px solid rgba(231,238,246,.9);
+      border-radius: 22px;
+      padding: 12px 12px 11px;
+      min-height: 190px;
+      display:flex;
+      flex-direction:column;
+      gap: 8px;
     }
-    .mealCard{
-      border:1px solid var(--line);
-      background:linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
-      border-radius:22px;
-      padding:12px;
+    .meal .top{
+      display:flex;
+      align-items:baseline;
+      justify-content:space-between;
+      gap: 10px;
     }
-    .mealTop{
-      display:flex; align-items:center; justify-content:space-between; gap:10px;
-      margin-bottom:8px;
+    .meal .top .when{
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      line-height: 1.1;
     }
-    .tag{
-      font-size:11px;
-      font-weight:900;
-      letter-spacing:.14em;
-      text-transform:uppercase;
-      color:#0b1220;
-      background:#eef2f7;
-      border:1px solid #e3e9f2;
-      padding:6px 10px;
-      border-radius:999px;
-      white-space:nowrap;
+    .meal .name{
+      font-size: 15px;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: #0b1b2b;
     }
-    .mealName{
-      margin:8px 0 10px;
-      font-weight:900;
-      letter-spacing:-.02em;
-      font-size:15px;
-      line-height:1.15;
+    .chips{
+      display:flex;
+      flex-wrap:wrap;
+      gap: 8px;
+      margin-top: 2px;
     }
-    .mGrid{
-      display:grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap:8px;
-      margin-bottom:10px;
+    .chip{
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 850;
+      background: rgba(15,23,42,.06);
+      color: #0b1b2b;
+      line-height: 1.1;
     }
-    .m{
-      border:1px solid var(--line);
-      background:#fff;
-      border-radius:14px;
-      padding:8px 8px 7px;
-      text-align:center;
-    }
-    .m .k{font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#94a3b8; font-weight:900}
-    .m .v{font-size:15px; font-weight:900; margin-top:4px}
-    .m.p .v{color:var(--p)}
-    .m.f .v{color:var(--f)}
-    .m.c .v{color:var(--c)}
-    .m.kcal .v{color:#0f172a}
-    .toggle{
-      width:100%;
-      border:none;
-      background:#0b1220;
-      color:#fff;
-      border-radius:14px;
-      padding:10px 12px;
-      cursor:pointer;
-      font-weight:800;
-      font-size:12px;
-      letter-spacing:.10em;
-      text-transform:uppercase;
-    }
-    .details{
-      margin-top:10px;
-      display:none;
-      border-top:1px solid #eef2f7;
-      padding-top:10px;
-      color:#334155;
-      font-size:13px;
-      line-height:1.35;
-    }
-    .list{
-      margin:6px 0 0;
-      padding-left:18px;
-    }
-    .list li{margin:3px 0}
+    .chip.p{ background: rgba(45,212,191,.15); }
+    .chip.f{ background: rgba(139,92,246,.15); }
+    .chip.c{ background: rgba(56,189,248,.15); }
 
-    .auxGrid{
+    .list{
+      margin:0;
+      padding-left: 18px;
+      color: #334155;
+      font-size: 13px;
+      line-height: 1.25;
+    }
+    .list li{ margin: 4px 0; }
+
+    .foot{
       display:grid;
       grid-template-columns: 1fr 1fr;
-      gap:10px;
-      margin-top:10px;
+      gap: 12px;
+      margin-top: 12px;
     }
-    @media (max-width: 920px){
-      .auxGrid{grid-template-columns:1fr}
+    .box{
+      background: rgba(243,246,251,.55);
+      border: 1px solid rgba(231,238,246,.9);
+      border-radius: 22px;
+      padding: 12px;
     }
-    .auxBox{
-      border:1px solid var(--line);
-      background:#fff;
-      border-radius:22px;
-      padding:12px;
+    .box h4{
+      margin:0 0 8px;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color:#94a3b8;
+      line-height: 1.1;
     }
-    .auxBox h4{
-      margin:0 0 6px;
-      font-size:12px;
-      letter-spacing:.18em;
-      text-transform:uppercase;
-      color:#0b1220;
-    }
-    .auxBox ul{margin:0; padding-left:18px}
-    .auxBox li{margin:4px 0; color:#334155; font-size:13px; line-height:1.35}
 
-    /* Loader */
-    .overlay{
-      position:fixed; inset:0;
-      background:rgba(244,247,251,.65);
-      backdrop-filter: blur(6px);
-      display:none;
-      align-items:center;
-      justify-content:center;
-      padding:18px;
-      z-index:50;
+    @media (max-width: 980px){
+      .grid{ grid-template-columns: 1fr; }
+      .meal-grid{ grid-template-columns: 1fr; }
+      .prefs{ grid-template-columns: 1fr; }
+      .actions{ justify-content:stretch; }
+      .btn-primary{ flex: 1; }
+      .foot{ grid-template-columns: 1fr; }
     }
-    .loader{
-      width:min(520px, 100%);
-      border-radius:26px;
-      border:1px solid var(--line);
-      background:rgba(255,255,255,.85);
-      box-shadow:var(--shadow);
-      padding:14px;
-      display:flex; align-items:center; gap:12px;
-    }
-    .spin{
-      width:18px; height:18px; border-radius:999px;
-      border:3px solid #dbe6f6;
-      border-top-color:#0ea5e9;
-      animation: rot 0.9s linear infinite;
-      flex:none;
-    }
-    @keyframes rot{to{transform:rotate(360deg)}}
-    .loader .t1{font-weight:900}
-    .loader .t2{font-size:12px;color:var(--muted); margin-top:2px}
   </style>
 </head>
 
 <body>
   <div class="wrap">
-    <div class="topbar">
-      <div class="brand">
-        <h1>Chef-Bot</h1>
-        <p>Tu cocinero mediterráneo inteligente</p>
-      </div>
-      <div class="meta">
-        <div class="chip" id="chipCalories">Calorías: —</div>
-        <div class="chip" id="chipTokens" style="display:none">Tokens: —</div>
-      </div>
-    </div>
+    <header>
+      <h1>Chef-Bot</h1>
+      <p>Tu cocinero mediterráneo inteligente</p>
+    </header>
 
-    <div class="card">
+    <div class="panel">
       <div class="grid">
-        <!-- LEFT -->
+        <!-- OBJETIVOS -->
         <div>
-          <div class="sectionHead">
-            <div class="barMark p"></div>
+          <div class="section-title">
+            <div class="pill p"></div>
             <h2>Objetivos macros</h2>
           </div>
 
-          <div class="pills">
-            <div class="pill">
-              <label>Proteína</label>
-              <div class="val">
-                <input id="protein" type="number" min="0" step="1" value="160" />
-                <span class="unit">g</span>
+          <div class="macro-row">
+            <div class="field">
+              <div class="label">Proteína</div>
+              <div class="inputline">
+                <input id="protein" type="number" min="0" step="1" value="160" class="pval" />
+                <div class="unit">g</div>
               </div>
             </div>
-            <div class="pill">
-              <label>Grasas</label>
-              <div class="val">
-                <input id="fat" type="number" min="0" step="1" value="70" />
-                <span class="unit">g</span>
+
+            <div class="field">
+              <div class="label">Grasas</div>
+              <div class="inputline">
+                <input id="fat" type="number" min="0" step="1" value="70" class="fval" />
+                <div class="unit">g</div>
               </div>
             </div>
-            <div class="pill">
-              <label>Carbos</label>
-              <div class="val">
-                <input id="carbs" type="number" min="0" step="1" value="220" />
-                <span class="unit">g</span>
+
+            <div class="field">
+              <div class="label">Carbos</div>
+              <div class="inputline">
+                <input id="carbs" type="number" min="0" step="1" value="220" class="cval" />
+                <div class="unit">g</div>
               </div>
             </div>
           </div>
 
-          <div class="calBox">
-            <div class="calLeft">
-              <div class="kLabel">Total calorías</div>
-              <div class="kNum" id="kcalNum">—</div>
-              <div class="kUnit">kcal</div>
+          <div class="kcal">
+            <div class="kcal-left">
+              <div class="small">Total calorías</div>
+              <div class="big" id="kcal">0</div>
+              <div class="small">kcal</div>
             </div>
-            <div class="bar" aria-label="Distribución calórica de macros">
-              <div class="seg p" id="segP" style="width:0%"></div>
-              <div class="seg f" id="segF" style="width:0%"></div>
-              <div class="seg c" id="segC" style="width:0%"></div>
+            <div class="bar" aria-label="Distribución macros">
+              <div class="seg p" id="segP" style="width:33%"></div>
+              <div class="seg f" id="segF" style="width:33%"></div>
+              <div class="seg c" id="segC" style="width:34%"></div>
             </div>
           </div>
         </div>
 
-        <!-- RIGHT -->
+        <!-- PREFERENCIAS -->
         <div>
-          <div class="sectionHead">
-            <div class="barMark" style="background:#111827"></div>
+          <div class="section-title">
+            <div class="pill"></div>
             <h2>Preferencias</h2>
           </div>
 
-          <div class="prefsRow">
+          <div class="prefs">
             <div class="field">
-              <label>Platos / día</label>
-              <select id="meals">
-                <option value="3" selected>3 platos</option>
-                <option value="4">4 platos</option>
-                <option value="5">5 platos</option>
-              </select>
+              <div class="label">Platos / día</div>
+              <div class="inputline">
+                <select id="meals">
+                  <option value="1">1 plato</option>
+                  <option value="2">2 platos</option>
+                  <option value="3" selected>3 platos</option>
+                </select>
+              </div>
             </div>
+
             <div class="field">
-              <label>Filtro</label>
-              <input id="filter" type="text" placeholder="Ej: Vegano, sin lactosa, sin gluten..." />
+              <div class="label">Filtro</div>
+              <div class="inputline">
+                <input id="filter" type="text" placeholder="Ej: Vegano / Celíaco" />
+              </div>
             </div>
           </div>
 
-          <div class="textareaWrap">
-            <label for="fridge">Nevera</label>
-            <textarea id="fridge" placeholder="Escribe lo que tienes hoy disponible... (Ej: pollo, arroz, yogur, tomate, atún, garbanzos, espinacas)"></textarea>
+          <div class="actions">
+            <button id="btn" class="btn btn-primary">Generar menú ideal</button>
+          </div>
+
+          <div id="status" class="status"></div>
+          <div id="error" class="error"></div>
+        </div>
+      </div>
+
+      <div class="results" id="results">
+        <h3>Plan del día</h3>
+        <div class="meal-grid" id="mealGrid"></div>
+
+        <div class="foot">
+          <div class="box">
+            <h4>Lista de compra</h4>
+            <ul class="list" id="shopList"></ul>
+          </div>
+          <div class="box">
+            <h4>Tips de preparación</h4>
+            <ul class="list" id="tipsList"></ul>
           </div>
         </div>
-      </div>
-
-      <div class="actions">
-        <button class="btn secondary" id="btnIdeal">Sugerir menú ideal</button>
-        <button class="btn primary" id="btnFridge">Cocinar con mi nevera</button>
-      </div>
-
-      <div class="alert" id="alert">
-        <div>
-          <strong id="alertTitle">Error</strong>
-          <div id="alertMsg"></div>
-        </div>
-        <button class="x" id="alertClose" aria-label="Cerrar">×</button>
-      </div>
-
-      <div class="out" id="out" style="display:none">
-        <div class="outHead">
-          <h3 id="planTitle">Plan</h3>
-          <div class="smallMuted" id="planMeta"></div>
-        </div>
-
-        <div class="planGrid" id="planGrid"></div>
-
-        <div class="auxGrid">
-          <div class="auxBox">
-            <h4>Lista de la compra</h4>
-            <ul id="shopping"></ul>
-          </div>
-          <div class="auxBox">
-            <h4>Tips generales</h4>
-            <ul id="tips"></ul>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Loader overlay -->
-  <div class="overlay" id="overlay">
-    <div class="loader">
-      <div class="spin" aria-hidden="true"></div>
-      <div>
-        <div class="t1">Chef-Bot está cocinando…</div>
-        <div class="t2">Generando un plan compacto y práctico (formato JSON controlado).</div>
       </div>
     </div>
   </div>
@@ -629,264 +513,183 @@
     const carbsEl = $("carbs");
     const mealsEl = $("meals");
     const filterEl = $("filter");
-    const fridgeEl = $("fridge");
 
-    const kcalNumEl = $("kcalNum");
+    const kcalEl = $("kcal");
     const segP = $("segP");
     const segF = $("segF");
     const segC = $("segC");
-    const chipCalories = $("chipCalories");
-    const chipTokens = $("chipTokens");
 
-    const btnIdeal = $("btnIdeal");
-    const btnFridge = $("btnFridge");
-    const overlay = $("overlay");
+    const btn = $("btn");
+    const status = $("status");
+    const errorBox = $("error");
 
-    const alertBox = $("alert");
-    const alertTitle = $("alertTitle");
-    const alertMsg = $("alertMsg");
-    const alertClose = $("alertClose");
+    const results = $("results");
+    const mealGrid = $("mealGrid");
+    const shopList = $("shopList");
+    const tipsList = $("tipsList");
 
-    const out = $("out");
-    const planTitle = $("planTitle");
-    const planMeta = $("planMeta");
-    const planGrid = $("planGrid");
-    const shopping = $("shopping");
-    const tips = $("tips");
-
-    function clampNum(n, min, max){
-      n = Number.isFinite(n) ? n : min;
-      return Math.min(Math.max(n, min), max);
+    function clamp(n, min, max){
+      return Math.max(min, Math.min(max, n));
     }
 
-    function currentTargets(){
-      const p = clampNum(parseInt(proteinEl.value || "0", 10), 0, 400);
-      const f = clampNum(parseInt(fatEl.value || "0", 10), 0, 200);
-      const c = clampNum(parseInt(carbsEl.value || "0", 10), 0, 600);
-      const kcal = p*4 + c*4 + f*9;
-      return { protein_g: p, fat_g: f, carbs_g: c, calories_kcal: kcal };
+    function readNumber(el){
+      const v = Number(el.value);
+      return Number.isFinite(v) ? v : 0;
     }
 
-    function updateCaloriesUI(){
-      const t = currentTargets();
-      kcalNumEl.textContent = t.calories_kcal;
-      chipCalories.textContent = `Calorías: ${t.calories_kcal} kcal`;
+    function updateCalories(){
+      const p = clamp(readNumber(proteinEl), 0, 9999);
+      const f = clamp(readNumber(fatEl), 0, 9999);
+      const c = clamp(readNumber(carbsEl), 0, 9999);
 
-      const pK = t.protein_g*4;
-      const cK = t.carbs_g*4;
-      const fK = t.fat_g*9;
-      const tot = Math.max(1, pK + cK + fK);
+      const kcal = Math.round(p*4 + c*4 + f*9);
+      kcalEl.textContent = String(kcal);
 
-      segP.style.width = `${(pK/tot)*100}%`;
-      segF.style.width = `${(fK/tot)*100}%`;
-      segC.style.width = `${(cK/tot)*100}%`;
+      const total = (p*4 + c*4 + f*9) || 1;
+      const wp = (p*4)/total * 100;
+      const wf = (f*9)/total * 100;
+      const wc = (c*4)/total * 100;
+
+      segP.style.width = wp.toFixed(1) + "%";
+      segF.style.width = wf.toFixed(1) + "%";
+      segC.style.width = wc.toFixed(1) + "%";
     }
 
-    function showAlert(title, msg){
-      alertTitle.textContent = title;
-      alertMsg.textContent = msg;
-      alertBox.style.display = "flex";
-    }
-    function hideAlert(){ alertBox.style.display = "none"; }
-    alertClose.addEventListener("click", hideAlert);
-
-    function setLoading(isLoading){
-      overlay.style.display = isLoading ? "flex" : "none";
-      btnIdeal.disabled = isLoading;
-      btnFridge.disabled = isLoading;
+    function showStatus(msg){
+      status.style.display = "block";
+      status.textContent = msg;
     }
 
-    function kcalFromMacros(m){
-      const p = Number(m?.protein_g || 0);
-      const c = Number(m?.carbs_g || 0);
-      const f = Number(m?.fat_g || 0);
-      return Math.round(p*4 + c*4 + f*9);
+    function clearStatus(){
+      status.style.display = "none";
+      status.textContent = "";
     }
 
-    function clearOutput(){
-      planGrid.innerHTML = "";
-      shopping.innerHTML = "";
-      tips.innerHTML = "";
-      out.style.display = "none";
-      chipTokens.style.display = "none";
+    function showError(msg){
+      errorBox.style.display = "block";
+      errorBox.textContent = msg;
     }
 
-    function renderPlan(data){
-      clearOutput();
-      const day = data?.days?.[0];
-      if(!day || !Array.isArray(day.meals)) {
-        showAlert("Respuesta inesperada", "No he podido renderizar el plan. Prueba otra vez.");
-        return;
-      }
+    function clearError(){
+      errorBox.style.display = "none";
+      errorBox.textContent = "";
+    }
 
-      planTitle.textContent = data.plan_name || "Plan del día";
-      const tm = day.total_macros || {};
-      planMeta.textContent = `Objetivo aprox.: ${Math.round(tm.protein_g||0)}P / ${Math.round(tm.fat_g||0)}G / ${Math.round(tm.carbs_g||0)}C (${kcalFromMacros(tm)} kcal)`;
+    function esc(s){
+      return String(s ?? "")
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;");
+    }
 
-      day.meals.forEach((meal, idx) => {
+    function renderPlan(plan){
+      mealGrid.innerHTML = "";
+      shopList.innerHTML = "";
+      tipsList.innerHTML = "";
+
+      const meals = Array.isArray(plan.meals) ? plan.meals : [];
+
+      meals.forEach(m => {
+        const when = esc(m.meal || "");
+        const name = esc(m.recipe_name || "");
+
+        const mac = m.approx_macros_g || {};
+        const p = Number(mac.protein ?? 0);
+        const f = Number(mac.fat ?? 0);
+        const c = Number(mac.carbs ?? 0);
+
+        const ingredients = Array.isArray(m.ingredients) ? m.ingredients : [];
+        const steps = Array.isArray(m.steps) ? m.steps : [];
+
         const card = document.createElement("div");
-        card.className = "mealCard";
-
-        const top = document.createElement("div");
-        top.className = "mealTop";
-
-        const tag = document.createElement("div");
-        tag.className = "tag";
-        tag.textContent = meal.meal_type || `Plato ${idx+1}`;
-
-        top.appendChild(tag);
-        card.appendChild(top);
-
-        const name = document.createElement("div");
-        name.className = "mealName";
-        name.textContent = meal.recipe_name || "Receta";
-        card.appendChild(name);
-
-        const m = meal.macros || {};
-        const mg = document.createElement("div");
-        mg.className = "mGrid";
-        mg.innerHTML = `
-          <div class="m p"><div class="k">Prot</div><div class="v">${Math.round(m.protein_g||0)} g</div></div>
-          <div class="m f"><div class="k">Grasas</div><div class="v">${Math.round(m.fat_g||0)} g</div></div>
-          <div class="m c"><div class="k">Carbos</div><div class="v">${Math.round(m.carbs_g||0)} g</div></div>
-          <div class="m kcal"><div class="k">Kcal</div><div class="v">${kcalFromMacros(m)}</div></div>
+        card.className = "meal";
+        card.innerHTML = `
+          <div class="top">
+            <div class="when">${when}</div>
+          </div>
+          <div class="name">${name}</div>
+          <div class="chips">
+            <div class="chip p">P ${Math.round(p)}g</div>
+            <div class="chip f">G ${Math.round(f)}g</div>
+            <div class="chip c">C ${Math.round(c)}g</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr;gap:8px;margin-top:2px">
+            <div>
+              <div class="label" style="margin-bottom:6px">Ingredientes</div>
+              <ul class="list">${ingredients.slice(0,10).map(x => `<li>${esc(x)}</li>`).join("")}</ul>
+            </div>
+            <div>
+              <div class="label" style="margin-bottom:6px">Pasos</div>
+              <ul class="list">${steps.slice(0,6).map(x => `<li>${esc(x)}</li>`).join("")}</ul>
+            </div>
+          </div>
         `;
-        card.appendChild(mg);
-
-        const btn = document.createElement("button");
-        btn.className = "toggle";
-        btn.type = "button";
-        btn.textContent = "Ver ingredientes y pasos";
-        card.appendChild(btn);
-
-        const det = document.createElement("div");
-        det.className = "details";
-
-        const ingTitle = document.createElement("div");
-        ingTitle.style.fontWeight = "900";
-        ingTitle.style.marginBottom = "6px";
-        ingTitle.textContent = "Ingredientes (aprox.)";
-        det.appendChild(ingTitle);
-
-        const ulIng = document.createElement("ul");
-        ulIng.className = "list";
-        (meal.ingredients || []).forEach(it => {
-          const li = document.createElement("li");
-          const g = (it?.quantity_grams != null) ? ` — ${Math.round(it.quantity_grams)} g` : "";
-          li.textContent = `${it?.name || "Ingrediente"}${g}`;
-          ulIng.appendChild(li);
-        });
-        det.appendChild(ulIng);
-
-        const stTitle = document.createElement("div");
-        stTitle.style.fontWeight = "900";
-        stTitle.style.margin = "10px 0 6px";
-        stTitle.textContent = "Preparación (máx. 2 pasos)";
-        det.appendChild(stTitle);
-
-        const ol = document.createElement("ol");
-        ol.className = "list";
-        (meal.steps || []).slice(0,2).forEach(s => {
-          const li = document.createElement("li");
-          li.textContent = s;
-          ol.appendChild(li);
-        });
-        det.appendChild(ol);
-
-        btn.addEventListener("click", () => {
-          const open = det.style.display === "block";
-          det.style.display = open ? "none" : "block";
-          btn.textContent = open ? "Ver ingredientes y pasos" : "Ocultar detalles";
-        });
-
-        card.appendChild(det);
-        planGrid.appendChild(card);
+        mealGrid.appendChild(card);
       });
 
-      (data.shopping_list || []).forEach(x => {
+      (plan.shopping_list || []).slice(0,16).forEach(x => {
         const li = document.createElement("li");
-        li.textContent = x;
-        shopping.appendChild(li);
+        li.innerHTML = esc(x);
+        shopList.appendChild(li);
       });
 
-      (data.general_tips || []).forEach(x => {
+      (plan.prep_tips || []).slice(0,10).forEach(x => {
         const li = document.createElement("li");
-        li.textContent = x;
-        tips.appendChild(li);
+        li.innerHTML = esc(x);
+        tipsList.appendChild(li);
       });
 
-      out.style.display = "block";
+      results.style.display = "block";
     }
 
-    async function callChef(mode){
-      hideAlert();
-      clearOutput();
+    async function generate(){
+      clearError();
+      clearStatus();
+      results.style.display = "none";
 
-      const targets = currentTargets();
-      const numMeals = clampNum(parseInt(mealsEl.value, 10), 3, 5);
-      const filter = (filterEl.value || "").trim();
-      const fridge = (fridgeEl.value || "").trim();
+      const protein = clamp(readNumber(proteinEl), 0, 400);
+      const fat = clamp(readNumber(fatEl), 0, 200);
+      const carbs = clamp(readNumber(carbsEl), 0, 500);
+      const mealsPerDay = clamp(Number(mealsEl.value), 1, 3);
+      const dietaryFilter = String(filterEl.value || "").trim().slice(0, 120);
 
-      if(mode === "fridge" && fridge.length < 3){
-        showAlert("Falta la nevera", "Escribe al menos 2–3 ingredientes para poder cocinar con lo que tienes.");
+      if (protein + fat + carbs <= 0){
+        showError("Pon algún objetivo de macros (al menos uno > 0).");
         return;
       }
 
-      const payload = {
-        mode,
-        targets,
-        numMeals,
-        filter,
-        fridge
-      };
+      btn.disabled = true;
+      showStatus("Cocinando un plan mediterráneo que encaje con tus macros…");
 
-      setLoading(true);
       try{
-        const controller = new AbortController();
-        const t = setTimeout(() => controller.abort(), 45000);
-
         const res = await fetch("/.netlify/functions/chef", {
-          method:"POST",
-          headers: { "Content-Type":"application/json" },
-          body: JSON.stringify(payload),
-          signal: controller.signal
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ protein, fat, carbs, mealsPerDay, dietaryFilter })
         });
 
-        clearTimeout(t);
+        const data = await res.json().catch(() => ({}));
 
-        const data = await res.json().catch(() => null);
-        if(!res.ok || !data || data.ok === false){
-          const msg = data?.error || `Error HTTP ${res.status}`;
-          showAlert("Fallo interno", msg);
-          return;
-        }
-
-        if(data.usage?.totalTokens != null){
-          chipTokens.style.display = "inline-flex";
-          chipTokens.textContent = `Tokens: ${data.usage.totalTokens}`;
+        if (!res.ok || !data.ok){
+          const msg = data?.error || "Fallo interno. Revisa el log de la función (Netlify) para ver el detalle.";
+          throw new Error(msg);
         }
 
         renderPlan(data.plan);
-      }catch(e){
-        const msg = (e && e.name === "AbortError")
-          ? "La petición ha tardado demasiado. Prueba otra vez (o baja platos/tamaño de nevera)."
-          : "No se pudo conectar con el servidor. Revisa tu despliegue en Netlify.";
-        showAlert("Error de conexión", msg);
+        showStatus("Listo. Ajusta macros/filtro si quieres y regenera.");
+      }catch(err){
+        showError(err?.message || "Fallo interno.");
       }finally{
-        setLoading(false);
+        btn.disabled = false;
       }
     }
 
-    ["input","change"].forEach(ev => {
-      proteinEl.addEventListener(ev, updateCaloriesUI);
-      fatEl.addEventListener(ev, updateCaloriesUI);
-      carbsEl.addEventListener(ev, updateCaloriesUI);
-    });
+    [proteinEl, fatEl, carbsEl].forEach(el => el.addEventListener("input", updateCalories));
+    mealsEl.addEventListener("change", () => { /* nada */ });
 
-    btnIdeal.addEventListener("click", () => callChef("ideal"));
-    btnFridge.addEventListener("click", () => callChef("fridge"));
+    btn.addEventListener("click", generate);
 
-    updateCaloriesUI();
+    updateCalories();
   </script>
 </body>
 </html>
