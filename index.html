@@ -1,554 +1,892 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Chef-Bot | Nutrición Inteligente</title>
-
-  <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Chef-Bot</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>
-    body { font-family: 'Inter', sans-serif; }
-
-    .bg-mmx-gradient { background: linear-gradient(135deg, #00BCC9 0%, #0088A3 100%); }
-    .text-mmx-gradient {
-      background: linear-gradient(135deg, #00BCC9 0%, #0088A3 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+    :root{
+      --bg:#f4f7fb;
+      --card:#ffffff;
+      --muted:#7a8799;
+      --text:#0f172a;
+      --line:#e7edf5;
+      --shadow: 0 20px 60px rgba(15, 23, 42, .08);
+      --p:#20c997;   /* proteína */
+      --f:#7c3aed;   /* grasas */
+      --c:#0ea5e9;   /* carbs */
+      --btn:#0ea5e9;
+      --btn2:#20c997;
+      --danger:#ef4444;
+      --warnbg:#fff1f2;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      background: radial-gradient(1200px 700px at 20% 10%, rgba(14,165,233,.10), transparent 60%),
+                  radial-gradient(900px 500px at 70% 20%, rgba(32,201,151,.10), transparent 55%),
+                  var(--bg);
+      color:var(--text);
+    }
+    .wrap{
+      max-width:1100px;
+      margin:0 auto;
+      padding:18px 18px 26px;
+    }
+    .topbar{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:14px;
+      margin-bottom:12px;
+    }
+    .brand h1{
+      font-size:26px;
+      line-height:1.1;
+      margin:0;
+      letter-spacing:-.02em;
+    }
+    .brand p{
+      margin:6px 0 0;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.3;
+    }
+    .meta{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      justify-content:flex-end;
+      flex-wrap:wrap;
+    }
+    .chip{
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.75);
+      backdrop-filter: blur(6px);
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      color:#334155;
     }
 
-    .text-macro-protein { color: #20C29E; }
-    .text-macro-fat     { color: #8C44F7; }
-    .text-macro-carb    { color: #00A3FF; }
+    .card{
+      background:var(--card);
+      border:1px solid rgba(231,237,245,.9);
+      border-radius:34px;
+      box-shadow:var(--shadow);
+      padding:18px;
+    }
 
-    .bg-macro-protein { background-color: #20C29E; }
-    .bg-macro-fat     { background-color: #8C44F7; }
-    .bg-macro-carb    { background-color: #00A3FF; }
+    .grid{
+      display:grid;
+      grid-template-columns: 1.05fr .95fr;
+      gap:16px;
+    }
+    @media (max-width: 920px){
+      .grid{grid-template-columns:1fr}
+    }
 
-    .animate-spin-slow { animation: spin 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
-    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .sectionHead{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin-bottom:10px;
+      padding-left:2px;
+    }
+    .barMark{
+      width:6px;height:18px;border-radius:999px;background:#111827;
+      opacity:.9;
+    }
+    .barMark.p{background:var(--p)}
+    .barMark.f{background:var(--f)}
+    .barMark.c{background:var(--c)}
+    .sectionHead h2{
+      margin:0;
+      font-size:12px;
+      letter-spacing:.22em;
+      text-transform:uppercase;
+      color:#0b1220;
+    }
 
-    .fade-in { animation: fadeIn .35s ease-out both; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    .pills{
+      display:grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap:10px;
+      margin-bottom:12px;
+    }
+    .pill{
+      border:1px solid var(--line);
+      background:linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+      border-radius:999px;
+      padding:10px 12px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      min-height:54px;
+      box-shadow: 0 6px 18px rgba(15,23,42,.05) inset;
+    }
+    .pill label{
+      font-size:11px;
+      letter-spacing:.18em;
+      text-transform:uppercase;
+      color:#6b7280;
+      white-space:nowrap;
+    }
+    .pill .val{
+      display:flex; align-items:baseline; gap:8px;
+      margin-left:auto;
+    }
+    .pill input{
+      width:90px;
+      border:none;
+      outline:none;
+      text-align:right;
+      font-size:22px;
+      font-weight:800;
+      background:transparent;
+      color:var(--text);
+      padding:0;
+    }
+    .pill .unit{font-size:12px;color:#94a3b8;font-weight:700}
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+    input[type=number]{ -moz-appearance:textfield; }
 
-    .slide-in { animation: slideIn .45s ease-out both; }
-    @keyframes slideIn { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+    .calBox{
+      border:1px solid var(--line);
+      border-radius:24px;
+      padding:14px 14px 12px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      background:linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+    }
+    .calLeft .kLabel{
+      font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:#94a3b8;
+      margin-bottom:6px;
+      font-weight:700;
+    }
+    .calLeft .kNum{
+      font-size:42px;
+      line-height:1;
+      font-weight:900;
+      letter-spacing:-.03em;
+    }
+    .calLeft .kUnit{
+      margin-top:4px;
+      font-size:12px;
+      color:#a3afbf;
+      font-weight:700;
+      letter-spacing:.14em;
+      text-transform:uppercase;
+    }
+    .bar{
+      width:52%;
+      min-width:220px;
+      height:12px;
+      border-radius:999px;
+      overflow:hidden;
+      border:1px solid rgba(231,237,245,.9);
+      background:#eef2f7;
+      display:flex;
+    }
+    .seg{height:100%}
+    .seg.p{background:var(--p)}
+    .seg.f{background:var(--f)}
+    .seg.c{background:var(--c)}
+    @media (max-width: 520px){
+      .calBox{flex-direction:column; align-items:flex-start}
+      .bar{width:100%}
+    }
+
+    .prefsRow{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+      margin-bottom:10px;
+    }
+    @media (max-width: 520px){
+      .prefsRow{grid-template-columns:1fr}
+    }
+    .field{
+      border:1px solid var(--line);
+      background:linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+      border-radius:999px;
+      padding:10px 12px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-height:48px;
+    }
+    .field label{
+      font-size:11px;
+      letter-spacing:.18em;
+      text-transform:uppercase;
+      color:#94a3b8;
+      font-weight:700;
+      white-space:nowrap;
+    }
+    .field select, .field input{
+      border:none;
+      outline:none;
+      width:100%;
+      font-size:14px;
+      background:transparent;
+      color:var(--text);
+    }
+    .textareaWrap{
+      margin-top:8px;
+    }
+    .textareaWrap label{
+      display:block;
+      font-size:11px;
+      letter-spacing:.18em;
+      text-transform:uppercase;
+      color:#94a3b8;
+      font-weight:800;
+      margin:8px 0 8px;
+      padding-left:2px;
+    }
+    textarea{
+      width:100%;
+      min-height:110px;
+      resize:vertical;
+      border-radius:22px;
+      border:1px dashed #d8e2ef;
+      background:#fbfdff;
+      padding:12px 14px;
+      outline:none;
+      font-size:14px;
+      line-height:1.35;
+    }
+    textarea:focus{border-style:solid;border-color:#cfe2ff}
+
+    .actions{
+      display:grid;
+      grid-template-columns: 1fr 1.6fr;
+      gap:12px;
+      margin-top:14px;
+    }
+    @media (max-width: 720px){
+      .actions{grid-template-columns:1fr}
+    }
+    .btn{
+      border:none;
+      cursor:pointer;
+      border-radius:999px;
+      padding:14px 16px;
+      font-weight:800;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      font-size:12px;
+      transition:transform .06s ease, opacity .2s ease;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      gap:10px;
+      user-select:none;
+    }
+    .btn:active{transform:translateY(1px)}
+    .btn.secondary{
+      background:#eef2f7;
+      color:#334155;
+      border:1px solid #e3e9f2;
+    }
+    .btn.primary{
+      background: linear-gradient(90deg, var(--btn2), var(--btn));
+      color:white;
+      box-shadow: 0 18px 40px rgba(14,165,233,.20);
+    }
+    .btn[disabled]{opacity:.55; cursor:not-allowed}
+
+    .alert{
+      margin-top:12px;
+      border-radius:16px;
+      border:1px solid rgba(239,68,68,.28);
+      background:var(--warnbg);
+      color:#7f1d1d;
+      padding:10px 12px;
+      display:none;
+      align-items:flex-start;
+      gap:10px;
+      font-size:13px;
+      line-height:1.25;
+    }
+    .alert strong{display:block; margin-bottom:2px}
+    .alert .x{
+      margin-left:auto;
+      border:none;
+      background:transparent;
+      cursor:pointer;
+      font-size:18px;
+      line-height:1;
+      color:#b91c1c;
+    }
+
+    /* Output */
+    .out{
+      margin-top:14px;
+    }
+    .outHead{
+      display:flex; align-items:flex-end; justify-content:space-between; gap:10px;
+      margin:14px 2px 10px;
+    }
+    .outHead h3{
+      margin:0;
+      font-size:16px;
+      letter-spacing:-.01em;
+    }
+    .smallMuted{font-size:12px;color:var(--muted)}
+    .planGrid{
+      display:grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap:10px;
+    }
+    @media (max-width: 920px){
+      .planGrid{grid-template-columns:1fr}
+    }
+    .mealCard{
+      border:1px solid var(--line);
+      background:linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+      border-radius:22px;
+      padding:12px;
+    }
+    .mealTop{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      margin-bottom:8px;
+    }
+    .tag{
+      font-size:11px;
+      font-weight:900;
+      letter-spacing:.14em;
+      text-transform:uppercase;
+      color:#0b1220;
+      background:#eef2f7;
+      border:1px solid #e3e9f2;
+      padding:6px 10px;
+      border-radius:999px;
+      white-space:nowrap;
+    }
+    .mealName{
+      margin:8px 0 10px;
+      font-weight:900;
+      letter-spacing:-.02em;
+      font-size:15px;
+      line-height:1.15;
+    }
+    .mGrid{
+      display:grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap:8px;
+      margin-bottom:10px;
+    }
+    .m{
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:14px;
+      padding:8px 8px 7px;
+      text-align:center;
+    }
+    .m .k{font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#94a3b8; font-weight:900}
+    .m .v{font-size:15px; font-weight:900; margin-top:4px}
+    .m.p .v{color:var(--p)}
+    .m.f .v{color:var(--f)}
+    .m.c .v{color:var(--c)}
+    .m.kcal .v{color:#0f172a}
+    .toggle{
+      width:100%;
+      border:none;
+      background:#0b1220;
+      color:#fff;
+      border-radius:14px;
+      padding:10px 12px;
+      cursor:pointer;
+      font-weight:800;
+      font-size:12px;
+      letter-spacing:.10em;
+      text-transform:uppercase;
+    }
+    .details{
+      margin-top:10px;
+      display:none;
+      border-top:1px solid #eef2f7;
+      padding-top:10px;
+      color:#334155;
+      font-size:13px;
+      line-height:1.35;
+    }
+    .list{
+      margin:6px 0 0;
+      padding-left:18px;
+    }
+    .list li{margin:3px 0}
+
+    .auxGrid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+      margin-top:10px;
+    }
+    @media (max-width: 920px){
+      .auxGrid{grid-template-columns:1fr}
+    }
+    .auxBox{
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:22px;
+      padding:12px;
+    }
+    .auxBox h4{
+      margin:0 0 6px;
+      font-size:12px;
+      letter-spacing:.18em;
+      text-transform:uppercase;
+      color:#0b1220;
+    }
+    .auxBox ul{margin:0; padding-left:18px}
+    .auxBox li{margin:4px 0; color:#334155; font-size:13px; line-height:1.35}
+
+    /* Loader */
+    .overlay{
+      position:fixed; inset:0;
+      background:rgba(244,247,251,.65);
+      backdrop-filter: blur(6px);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      z-index:50;
+    }
+    .loader{
+      width:min(520px, 100%);
+      border-radius:26px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.85);
+      box-shadow:var(--shadow);
+      padding:14px;
+      display:flex; align-items:center; gap:12px;
+    }
+    .spin{
+      width:18px; height:18px; border-radius:999px;
+      border:3px solid #dbe6f6;
+      border-top-color:#0ea5e9;
+      animation: rot 0.9s linear infinite;
+      flex:none;
+    }
+    @keyframes rot{to{transform:rotate(360deg)}}
+    .loader .t1{font-weight:900}
+    .loader .t2{font-size:12px;color:var(--muted); margin-top:2px}
   </style>
 </head>
 
-<body class="bg-[#f8fafc] min-h-screen text-slate-900 overflow-x-hidden">
-  <div class="max-w-5xl mx-auto px-6 py-12 md:py-24">
-
-    <!-- HEADER -->
-    <header class="text-center mb-20 fade-in">
-      <div class="inline-block p-1 px-3 bg-white border border-slate-100 rounded-full shadow-sm mb-6">
-        <p class="text-[10px] font-black text-[#0088A3] uppercase tracking-[0.4em]">
-          Powered by Gemini 2.5 Flash
-        </p>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand">
+        <h1>Chef-Bot</h1>
+        <p>Tu cocinero mediterráneo inteligente</p>
       </div>
+      <div class="meta">
+        <div class="chip" id="chipCalories">Calorías: —</div>
+        <div class="chip" id="chipTokens" style="display:none">Tokens: —</div>
+      </div>
+    </div>
 
-      <h1 class="text-7xl font-black text-mmx-gradient tracking-tighter mb-4">Chef-</h1>
+    <div class="card">
+      <div class="grid">
+        <!-- LEFT -->
+        <div>
+          <div class="sectionHead">
+            <div class="barMark p"></div>
+            <h2>Objetivos macros</h2>
+          </div>
 
-      <p class="text-slate-400 font-bold text-lg max-w-xl mx-auto leading-relaxed">
-        Tu nutricionista mediterráneo de precisión y bajo consumo.
-      </p>
-    </header>
-
-    <!-- CONFIG PANEL -->
-    <div class="grid grid-cols-1 gap-10">
-
-      <div class="bg-white rounded-[3.5rem] p-8 md:p-14 shadow-2xl shadow-slate-200/50 border border-white flex flex-col lg:flex-row gap-16 relative overflow-hidden">
-        <div class="absolute top-0 right-0 w-64 h-64 bg-cyan-50/50 rounded-full -translate-y-32 translate-x-32 blur-3xl -z-10"></div>
-
-        <!-- MACROS -->
-        <div class="flex-1 space-y-10">
-          <h2 class="text-[11px] font-black text-slate-800 uppercase tracking-[0.3em] flex items-center">
-            <span class="w-2 h-7 bg-mmx-gradient rounded-full mr-4"></span> Objetivos Macros
-          </h2>
-
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
-            <div class="flex flex-col gap-3">
-              <label class="text-[10px] font-black text-slate-400 tracking-[0.2em] ml-2">PROTEÍNA</label>
-              <div class="relative">
-                <input id="protein" type="number" min="0"
-                  class="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-black text-xl focus:border-[#00BCC9] focus:bg-white outline-none transition-all shadow-inner text-macro-protein"
-                  value="160" />
-                <span class="absolute right-6 top-1/2 -translate-y-1/2 text-[10px] font-black opacity-20">G</span>
+          <div class="pills">
+            <div class="pill">
+              <label>Proteína</label>
+              <div class="val">
+                <input id="protein" type="number" min="0" step="1" value="160" />
+                <span class="unit">g</span>
               </div>
             </div>
-
-            <div class="flex flex-col gap-3">
-              <label class="text-[10px] font-black text-slate-400 tracking-[0.2em] ml-2">GRASAS</label>
-              <div class="relative">
-                <input id="fat" type="number" min="0"
-                  class="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-black text-xl focus:border-[#00BCC9] focus:bg-white outline-none transition-all shadow-inner text-macro-fat"
-                  value="70" />
-                <span class="absolute right-6 top-1/2 -translate-y-1/2 text-[10px] font-black opacity-20">G</span>
+            <div class="pill">
+              <label>Grasas</label>
+              <div class="val">
+                <input id="fat" type="number" min="0" step="1" value="70" />
+                <span class="unit">g</span>
               </div>
             </div>
-
-            <div class="flex flex-col gap-3">
-              <label class="text-[10px] font-black text-slate-400 tracking-[0.2em] ml-2">CARBOS</label>
-              <div class="relative">
-                <input id="carbs" type="number" min="0"
-                  class="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-black text-xl focus:border-[#00BCC9] focus:bg-white outline-none transition-all shadow-inner text-macro-carb"
-                  value="220" />
-                <span class="absolute right-6 top-1/2 -translate-y-1/2 text-[10px] font-black opacity-20">G</span>
+            <div class="pill">
+              <label>Carbos</label>
+              <div class="val">
+                <input id="carbs" type="number" min="0" step="1" value="220" />
+                <span class="unit">g</span>
               </div>
             </div>
           </div>
 
-          <div class="bg-slate-50 p-8 rounded-[2.5rem] flex flex-col sm:flex-row justify-between items-center gap-6 shadow-inner border border-slate-100">
-            <div class="text-center sm:text-left">
-              <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Calorías</p>
-              <p class="text-4xl font-black text-slate-800">
-                <span id="totalCalories">0</span>
-                <span class="text-xs font-bold text-slate-300">KCAL</span>
-              </p>
+          <div class="calBox">
+            <div class="calLeft">
+              <div class="kLabel">Total calorías</div>
+              <div class="kNum" id="kcalNum">—</div>
+              <div class="kUnit">kcal</div>
             </div>
-
-            <div class="h-3 w-full sm:w-56 bg-slate-200 rounded-full overflow-hidden flex shadow-inner">
-              <div id="barProtein" class="h-full bg-macro-protein transition-all duration-700" style="width:0%"></div>
-              <div id="barFat"     class="h-full bg-macro-fat     transition-all duration-700" style="width:0%"></div>
-              <div id="barCarb"    class="h-full bg-macro-carb    transition-all duration-700" style="width:0%"></div>
+            <div class="bar" aria-label="Distribución calórica de macros">
+              <div class="seg p" id="segP" style="width:0%"></div>
+              <div class="seg f" id="segF" style="width:0%"></div>
+              <div class="seg c" id="segC" style="width:0%"></div>
             </div>
           </div>
         </div>
 
-        <!-- PREFS -->
-        <div class="flex-1 space-y-10">
-          <h2 class="text-[11px] font-black text-slate-800 uppercase tracking-[0.3em] flex items-center">
-            <span class="w-2 h-7 bg-slate-800 rounded-full mr-4"></span> Preferencias
-          </h2>
+        <!-- RIGHT -->
+        <div>
+          <div class="sectionHead">
+            <div class="barMark" style="background:#111827"></div>
+            <h2>Preferencias</h2>
+          </div>
 
-          <div class="grid grid-cols-2 gap-6">
-            <div class="flex flex-col gap-3">
-              <label class="text-[10px] font-black text-slate-400 tracking-[0.2em] ml-2">PLATOS / DÍA</label>
-              <select id="numMeals"
-                class="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-black text-sm focus:border-[#00BCC9] focus:bg-white outline-none transition-all shadow-inner cursor-pointer">
-                <option value="2">2 platos</option>
+          <div class="prefsRow">
+            <div class="field">
+              <label>Platos / día</label>
+              <select id="meals">
                 <option value="3" selected>3 platos</option>
                 <option value="4">4 platos</option>
                 <option value="5">5 platos</option>
-                <option value="6">6 platos</option>
               </select>
             </div>
-
-            <div class="flex flex-col gap-3">
-              <label class="text-[10px] font-black text-slate-400 tracking-[0.2em] ml-2">FILTRO</label>
-              <input id="dietaryFilter" type="text" placeholder="Ej: Vegano"
-                class="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] font-bold text-sm focus:border-[#00BCC9] focus:bg-white outline-none transition-all shadow-inner" />
+            <div class="field">
+              <label>Filtro</label>
+              <input id="filter" type="text" placeholder="Ej: Vegano, sin lactosa, sin gluten..." />
             </div>
           </div>
 
-          <div class="space-y-3">
-            <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Nevera</label>
-            <textarea id="fridgeIngredients" placeholder="Escribe lo que tienes hoy disponible..."
-              class="w-full p-6 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2.5rem] text-sm font-medium focus:border-[#00BCC9] focus:bg-white outline-none h-28 transition-all resize-none shadow-inner"></textarea>
+          <div class="textareaWrap">
+            <label for="fridge">Nevera</label>
+            <textarea id="fridge" placeholder="Escribe lo que tienes hoy disponible... (Ej: pollo, arroz, yogur, tomate, atún, garbanzos, espinacas)"></textarea>
           </div>
         </div>
       </div>
 
-      <!-- ACTIONS -->
-      <div class="flex flex-col sm:flex-row gap-5">
-        <button id="btnIdeal"
-          class="flex-1 py-7 bg-slate-200 hover:bg-slate-300 text-slate-700 font-black rounded-[2rem] transition-all disabled:opacity-50 text-xs tracking-widest shadow-sm">
-          SUGERIR MENÚ IDEAL
-        </button>
-
-        <button id="btnFridge"
-          class="flex-[2] py-7 bg-mmx-gradient text-white font-black rounded-[2rem] shadow-xl shadow-cyan-200 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 text-xs tracking-[0.2em]">
-          COCINAR CON MI NEVERA
-        </button>
+      <div class="actions">
+        <button class="btn secondary" id="btnIdeal">Sugerir menú ideal</button>
+        <button class="btn primary" id="btnFridge">Cocinar con mi nevera</button>
       </div>
 
-      <!-- ALERT -->
-      <div id="alertWrap" class="hidden"></div>
-
-      <!-- USAGE -->
-      <div id="usageWrap" class="hidden justify-center gap-6 fade-in">
-        <div class="bg-white px-6 py-2 rounded-full shadow-sm border border-slate-100 flex items-center gap-4">
-          <span class="text-[10px] font-black text-slate-300 uppercase tracking-tighter">
-            Tokens: <span id="usageTokens" class="text-[#0088A3]">0</span>
-          </span>
-          <div class="w-[1px] h-3 bg-slate-100"></div>
-          <span class="text-[10px] font-black text-slate-300 uppercase tracking-tighter">
-            Model: <span class="text-slate-800">2.5 Flash</span>
-          </span>
+      <div class="alert" id="alert">
+        <div>
+          <strong id="alertTitle">Error</strong>
+          <div id="alertMsg"></div>
         </div>
+        <button class="x" id="alertClose" aria-label="Cerrar">×</button>
       </div>
 
-      <!-- RESULTS -->
-      <div id="resultsSection" class="hidden space-y-16 slide-in pt-10">
-        <div class="text-center">
-          <h2 id="planName" class="text-5xl font-black text-slate-800 tracking-tighter mb-4"></h2>
-          <div class="w-20 h-1.5 bg-mmx-gradient mx-auto rounded-full shadow-sm"></div>
+      <div class="out" id="out" style="display:none">
+        <div class="outHead">
+          <h3 id="planTitle">Plan</h3>
+          <div class="smallMuted" id="planMeta"></div>
         </div>
 
-        <div id="mealsWrap" class="grid grid-cols-1 gap-10 max-w-4xl mx-auto"></div>
+        <div class="planGrid" id="planGrid"></div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-10 max-w-5xl mx-auto mt-20">
-          <div class="bg-white p-12 rounded-[3.5rem] shadow-xl border border-slate-50 flex flex-col group">
-            <h4 class="text-2xl font-black text-slate-800 mb-10 flex justify-between items-center">
-              Lista de Compra
-              <div class="p-3 bg-cyan-50 rounded-2xl group-hover:rotate-12 transition-transform">
-                <svg class="w-6 h-6 text-[#00BCC9]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M16 11V7a4 4 0 118 0m-4 4v2m0 10a4 4 0 01-8 0v-4m0 0a4 4 0 01-8 0M3 12h18"/>
-                </svg>
-              </div>
-            </h4>
-            <div id="shoppingWrap" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+        <div class="auxGrid">
+          <div class="auxBox">
+            <h4>Lista de la compra</h4>
+            <ul id="shopping"></ul>
           </div>
-
-          <div class="bg-slate-800 p-12 rounded-[3.5rem] text-white shadow-2xl shadow-slate-300 flex flex-col relative overflow-hidden">
-            <div class="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-10 translate-x-10 blur-2xl"></div>
-            <h4 class="text-2xl font-black mb-10 flex justify-between items-center text-cyan-400">
-              Tips Chef-
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-              </svg>
-            </h4>
-            <div id="tipsWrap" class="space-y-5"></div>
+          <div class="auxBox">
+            <h4>Tips generales</h4>
+            <ul id="tips"></ul>
           </div>
         </div>
       </div>
     </div>
-
-    <!-- LOADER OVERLAY -->
-    <div id="loader"
-      class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[100] flex flex-col items-center justify-center p-6 text-center fade-in">
-      <div class="bg-white p-12 rounded-[3rem] shadow-2xl flex flex-col items-center max-w-sm">
-        <div class="relative mb-8 w-20 h-20">
-          <div class="w-20 h-20 border-[6px] border-slate-100 rounded-[2rem] absolute"></div>
-          <div class="w-20 h-20 border-[6px] border-[#00BCC9] rounded-[2rem] absolute border-t-transparent animate-spin-slow"></div>
-        </div>
-        <h3 class="text-2xl font-black text-slate-800 tracking-tight">Chef- está trabajando</h3>
-        <p class="text-slate-400 font-bold uppercase text-[9px] tracking-[0.3em] mt-3">
-          Gemini 2.5 Flash Engine
-        </p>
-      </div>
-    </div>
-
-    <!-- FOOTER -->
-    <footer class="mt-40 pt-16 border-t border-slate-100 text-center">
-      <p class="text-slate-300 text-[10px] font-black uppercase tracking-[0.5em]">
-        Chef- 2025 • Arquitectura Nutricional Avanzada
-      </p>
-    </footer>
   </div>
 
-  <script type="module">
-    const API_ENDPOINT = "/.netlify/functions/chef";
+  <!-- Loader overlay -->
+  <div class="overlay" id="overlay">
+    <div class="loader">
+      <div class="spin" aria-hidden="true"></div>
+      <div>
+        <div class="t1">Chef-Bot está cocinando…</div>
+        <div class="t2">Generando un plan compacto y práctico (formato JSON controlado).</div>
+      </div>
+    </div>
+  </div>
 
-    const els = {
-      protein: document.getElementById("protein"),
-      fat: document.getElementById("fat"),
-      carbs: document.getElementById("carbs"),
-      numMeals: document.getElementById("numMeals"),
-      dietaryFilter: document.getElementById("dietaryFilter"),
-      fridgeIngredients: document.getElementById("fridgeIngredients"),
+  <script>
+    const $ = (id) => document.getElementById(id);
 
-      totalCalories: document.getElementById("totalCalories"),
-      barProtein: document.getElementById("barProtein"),
-      barFat: document.getElementById("barFat"),
-      barCarb: document.getElementById("barCarb"),
+    const proteinEl = $("protein");
+    const fatEl = $("fat");
+    const carbsEl = $("carbs");
+    const mealsEl = $("meals");
+    const filterEl = $("filter");
+    const fridgeEl = $("fridge");
 
-      btnIdeal: document.getElementById("btnIdeal"),
-      btnFridge: document.getElementById("btnFridge"),
+    const kcalNumEl = $("kcalNum");
+    const segP = $("segP");
+    const segF = $("segF");
+    const segC = $("segC");
+    const chipCalories = $("chipCalories");
+    const chipTokens = $("chipTokens");
 
-      alertWrap: document.getElementById("alertWrap"),
-      usageWrap: document.getElementById("usageWrap"),
-      usageTokens: document.getElementById("usageTokens"),
+    const btnIdeal = $("btnIdeal");
+    const btnFridge = $("btnFridge");
+    const overlay = $("overlay");
 
-      resultsSection: document.getElementById("resultsSection"),
-      planName: document.getElementById("planName"),
-      mealsWrap: document.getElementById("mealsWrap"),
-      shoppingWrap: document.getElementById("shoppingWrap"),
-      tipsWrap: document.getElementById("tipsWrap"),
+    const alertBox = $("alert");
+    const alertTitle = $("alertTitle");
+    const alertMsg = $("alertMsg");
+    const alertClose = $("alertClose");
 
-      loader: document.getElementById("loader"),
-    };
+    const out = $("out");
+    const planTitle = $("planTitle");
+    const planMeta = $("planMeta");
+    const planGrid = $("planGrid");
+    const shopping = $("shopping");
+    const tips = $("tips");
 
-    const state = {
-      openMeals: new Set(),
-      loading: false,
-      plan: null,
-      usage: null,
-    };
-
-    const n = (v) => {
-      const x = Number(v);
-      if (!Number.isFinite(x)) return 0;
-      return Math.max(0, x);
-    };
-
-    function calcCalories(p, c, f) {
-      return Math.round((p * 4) + (c * 4) + (f * 9));
+    function clampNum(n, min, max){
+      n = Number.isFinite(n) ? n : min;
+      return Math.min(Math.max(n, min), max);
     }
 
-    function updateCaloriesUI() {
-      const p = n(els.protein.value);
-      const f = n(els.fat.value);
-      const c = n(els.carbs.value);
-      const total = calcCalories(p, c, f);
-
-      els.totalCalories.textContent = String(total);
-
-      const wp = total > 0 ? (p * 4 / total) * 100 : 0;
-      const wf = total > 0 ? (f * 9 / total) * 100 : 0;
-      const wc = total > 0 ? (c * 4 / total) * 100 : 0;
-
-      els.barProtein.style.width = `${wp}%`;
-      els.barFat.style.width = `${wf}%`;
-      els.barCarb.style.width = `${wc}%`;
+    function currentTargets(){
+      const p = clampNum(parseInt(proteinEl.value || "0", 10), 0, 400);
+      const f = clampNum(parseInt(fatEl.value || "0", 10), 0, 200);
+      const c = clampNum(parseInt(carbsEl.value || "0", 10), 0, 600);
+      const kcal = p*4 + c*4 + f*9;
+      return { protein_g: p, fat_g: f, carbs_g: c, calories_kcal: kcal };
     }
 
-    function setLoading(on) {
-      state.loading = on;
-      els.loader.classList.toggle("hidden", !on);
-      els.btnIdeal.disabled = on;
-      els.btnFridge.disabled = on;
+    function updateCaloriesUI(){
+      const t = currentTargets();
+      kcalNumEl.textContent = t.calories_kcal;
+      chipCalories.textContent = `Calorías: ${t.calories_kcal} kcal`;
+
+      const pK = t.protein_g*4;
+      const cK = t.carbs_g*4;
+      const fK = t.fat_g*9;
+      const tot = Math.max(1, pK + cK + fK);
+
+      segP.style.width = `${(pK/tot)*100}%`;
+      segF.style.width = `${(fK/tot)*100}%`;
+      segC.style.width = `${(cK/tot)*100}%`;
     }
 
-    function showAlert(message) {
-      els.alertWrap.classList.remove("hidden");
-      els.alertWrap.innerHTML = `
-        <div class="bg-red-50 border-l-4 border-red-500 p-5 rounded-2xl flex items-start justify-between shadow-sm fade-in">
-          <div class="flex gap-3">
-            <div class="bg-red-500 rounded-full p-1 mt-0.5">
-              <svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </div>
-            <p class="text-sm text-red-800 font-bold">${escapeHtml(message)}</p>
-          </div>
-          <button id="alertClose" class="text-red-400 hover:text-red-700 transition-colors text-xl leading-none">&times;</button>
-        </div>
-      `;
-      document.getElementById("alertClose").onclick = () => {
-        els.alertWrap.classList.add("hidden");
-        els.alertWrap.innerHTML = "";
-      };
+    function showAlert(title, msg){
+      alertTitle.textContent = title;
+      alertMsg.textContent = msg;
+      alertBox.style.display = "flex";
+    }
+    function hideAlert(){ alertBox.style.display = "none"; }
+    alertClose.addEventListener("click", hideAlert);
+
+    function setLoading(isLoading){
+      overlay.style.display = isLoading ? "flex" : "none";
+      btnIdeal.disabled = isLoading;
+      btnFridge.disabled = isLoading;
     }
 
-    function escapeHtml(str) {
-      return String(str)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
+    function kcalFromMacros(m){
+      const p = Number(m?.protein_g || 0);
+      const c = Number(m?.carbs_g || 0);
+      const f = Number(m?.fat_g || 0);
+      return Math.round(p*4 + c*4 + f*9);
     }
 
-    function renderUsage(usage) {
-      if (!usage || typeof usage.totalTokenCount !== "number") {
-        els.usageWrap.classList.add("hidden");
+    function clearOutput(){
+      planGrid.innerHTML = "";
+      shopping.innerHTML = "";
+      tips.innerHTML = "";
+      out.style.display = "none";
+      chipTokens.style.display = "none";
+    }
+
+    function renderPlan(data){
+      clearOutput();
+      const day = data?.days?.[0];
+      if(!day || !Array.isArray(day.meals)) {
+        showAlert("Respuesta inesperada", "No he podido renderizar el plan. Prueba otra vez.");
         return;
       }
-      els.usageTokens.textContent = String(usage.totalTokenCount);
-      els.usageWrap.classList.remove("hidden");
-      els.usageWrap.classList.add("flex");
-    }
 
-    function macroCard(label, value, unit, valueClass, barClass) {
-      const v = Math.round(Number(value) || 0);
-      return `
-        <div class="bg-white p-5 rounded-3xl border border-slate-100 flex flex-col items-center shadow-sm hover:shadow-md transition-all group">
-          <span class="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest group-hover:text-slate-600 transition-colors">${label}</span>
-          <div class="flex items-baseline gap-1">
-            <span class="text-2xl font-black ${valueClass}">${v}</span>
-            <span class="text-[10px] font-bold text-slate-300">${unit}</span>
-          </div>
-          <div class="w-10 h-1 mt-3 rounded-full bg-slate-50 overflow-hidden">
-            <div class="h-full ${barClass}" style="width:100%"></div>
-          </div>
-        </div>
-      `;
-    }
+      planTitle.textContent = data.plan_name || "Plan del día";
+      const tm = day.total_macros || {};
+      planMeta.textContent = `Objetivo aprox.: ${Math.round(tm.protein_g||0)}P / ${Math.round(tm.fat_g||0)}G / ${Math.round(tm.carbs_g||0)}C (${kcalFromMacros(tm)} kcal)`;
 
-    function renderMeals(meals) {
-      state.openMeals = new Set(); // reset
-      els.mealsWrap.innerHTML = meals.map((meal, idx) => {
-        const kcal = Math.round((meal.macros?.protein_g || 0) * 4 + (meal.macros?.carbs_g || 0) * 4 + (meal.macros?.fat_g || 0) * 9);
+      day.meals.forEach((meal, idx) => {
+        const card = document.createElement("div");
+        card.className = "mealCard";
 
-        return `
-          <div class="bg-white border border-slate-100 rounded-[2.5rem] p-6 md:p-8 shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden group">
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
-              <div class="flex-1">
-                <span class="inline-block px-3 py-1 bg-cyan-50 text-[#0088A3] text-[9px] font-black uppercase tracking-[0.2em] rounded-full mb-3">
-                  ${escapeHtml(meal.meal_type || "COMIDA")}
-                </span>
-                <h4 class="text-2xl font-black text-slate-800 leading-tight">${escapeHtml(meal.recipe_name || "Receta")}</h4>
-              </div>
+        const top = document.createElement("div");
+        top.className = "mealTop";
 
-              <button data-meal="${idx}"
-                class="toggleMeal shrink-0 px-8 py-3 rounded-2xl font-black text-xs transition-all shadow-sm bg-slate-50 text-slate-600 hover:bg-slate-100">
-                VER PREPARACIÓN
-              </button>
-            </div>
+        const tag = document.createElement("div");
+        tag.className = "tag";
+        tag.textContent = meal.meal_type || `Plato ${idx+1}`;
 
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              ${macroCard("Proteína", meal.macros?.protein_g, "g", "text-macro-protein", "bg-macro-protein")}
-              ${macroCard("Grasas", meal.macros?.fat_g, "g", "text-macro-fat", "bg-macro-fat")}
-              ${macroCard("Carbos", meal.macros?.carbs_g, "g", "text-macro-carb", "bg-macro-carb")}
-              ${macroCard("Calorías", kcal, "kcal", "text-slate-800", "bg-slate-200")}
-            </div>
+        top.appendChild(tag);
+        card.appendChild(top);
 
-            <div id="mealDetails-${idx}" class="hidden mt-8 pt-8 border-t border-slate-50 grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div class="space-y-4">
-                <h5 class="text-[11px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-3">
-                  <span class="w-2 h-2 bg-[#00BCC9] rounded-full shadow-sm shadow-[#00BCC9]"></span> Ingredientes
-                </h5>
-                <div class="grid grid-cols-1 gap-2">
-                  ${(meal.ingredients || []).map((ing) => `
-                    <div class="text-xs bg-slate-50/50 p-3 rounded-2xl flex justify-between items-center border border-transparent hover:border-slate-100 hover:bg-white transition-all">
-                      <span class="font-bold text-slate-600">${escapeHtml(ing.name || "Ingrediente")}</span>
-                      <span class="font-black text-[#0088A3] bg-cyan-50/50 px-2 py-1 rounded-lg">${Number(ing.quantity_grams || 0)}g</span>
-                    </div>
-                  `).join("")}
-                </div>
-              </div>
+        const name = document.createElement("div");
+        name.className = "mealName";
+        name.textContent = meal.recipe_name || "Receta";
+        card.appendChild(name);
 
-              <div class="space-y-4">
-                <h5 class="text-[11px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-3">
-                  <span class="w-2 h-2 bg-slate-800 rounded-full"></span> Instrucciones
-                </h5>
-                <div class="space-y-3">
-                  ${(meal.steps || []).map((step, i) => `
-                    <div class="flex gap-4 items-start bg-slate-50/30 p-4 rounded-2xl border border-transparent hover:border-slate-100 hover:bg-white transition-all">
-                      <span class="shrink-0 w-6 h-6 rounded-xl bg-slate-800 text-white text-[10px] font-black flex items-center justify-center mt-0.5">${i + 1}</span>
-                      <p class="text-[12px] text-slate-600 font-medium leading-relaxed">${escapeHtml(step)}</p>
-                    </div>
-                  `).join("")}
-                </div>
-              </div>
-            </div>
-          </div>
+        const m = meal.macros || {};
+        const mg = document.createElement("div");
+        mg.className = "mGrid";
+        mg.innerHTML = `
+          <div class="m p"><div class="k">Prot</div><div class="v">${Math.round(m.protein_g||0)} g</div></div>
+          <div class="m f"><div class="k">Grasas</div><div class="v">${Math.round(m.fat_g||0)} g</div></div>
+          <div class="m c"><div class="k">Carbos</div><div class="v">${Math.round(m.carbs_g||0)} g</div></div>
+          <div class="m kcal"><div class="k">Kcal</div><div class="v">${kcalFromMacros(m)}</div></div>
         `;
-      }).join("");
+        card.appendChild(mg);
 
-      // Attach listeners
-      document.querySelectorAll(".toggleMeal").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const idx = Number(btn.dataset.meal);
-          const details = document.getElementById(`mealDetails-${idx}`);
-          const isOpen = !details.classList.contains("hidden");
+        const btn = document.createElement("button");
+        btn.className = "toggle";
+        btn.type = "button";
+        btn.textContent = "Ver ingredientes y pasos";
+        card.appendChild(btn);
 
-          // toggle
-          details.classList.toggle("hidden", isOpen);
-          btn.classList.toggle("bg-slate-800", !isOpen);
-          btn.classList.toggle("text-white", !isOpen);
-          btn.classList.toggle("shadow-lg", !isOpen);
-          btn.classList.toggle("bg-slate-50", isOpen);
-          btn.classList.toggle("text-slate-600", isOpen);
-          btn.textContent = isOpen ? "VER PREPARACIÓN" : "CERRAR RECETA";
-          if (!isOpen) details.classList.add("fade-in");
+        const det = document.createElement("div");
+        det.className = "details";
+
+        const ingTitle = document.createElement("div");
+        ingTitle.style.fontWeight = "900";
+        ingTitle.style.marginBottom = "6px";
+        ingTitle.textContent = "Ingredientes (aprox.)";
+        det.appendChild(ingTitle);
+
+        const ulIng = document.createElement("ul");
+        ulIng.className = "list";
+        (meal.ingredients || []).forEach(it => {
+          const li = document.createElement("li");
+          const g = (it?.quantity_grams != null) ? ` — ${Math.round(it.quantity_grams)} g` : "";
+          li.textContent = `${it?.name || "Ingrediente"}${g}`;
+          ulIng.appendChild(li);
         });
+        det.appendChild(ulIng);
+
+        const stTitle = document.createElement("div");
+        stTitle.style.fontWeight = "900";
+        stTitle.style.margin = "10px 0 6px";
+        stTitle.textContent = "Preparación (máx. 2 pasos)";
+        det.appendChild(stTitle);
+
+        const ol = document.createElement("ol");
+        ol.className = "list";
+        (meal.steps || []).slice(0,2).forEach(s => {
+          const li = document.createElement("li");
+          li.textContent = s;
+          ol.appendChild(li);
+        });
+        det.appendChild(ol);
+
+        btn.addEventListener("click", () => {
+          const open = det.style.display === "block";
+          det.style.display = open ? "none" : "block";
+          btn.textContent = open ? "Ver ingredientes y pasos" : "Ocultar detalles";
+        });
+
+        card.appendChild(det);
+        planGrid.appendChild(card);
       });
+
+      (data.shopping_list || []).forEach(x => {
+        const li = document.createElement("li");
+        li.textContent = x;
+        shopping.appendChild(li);
+      });
+
+      (data.general_tips || []).forEach(x => {
+        const li = document.createElement("li");
+        li.textContent = x;
+        tips.appendChild(li);
+      });
+
+      out.style.display = "block";
     }
 
-    function renderShopping(list) {
-      els.shoppingWrap.innerHTML = (list || []).map((item) => `
-        <div class="text-xs font-bold text-slate-600 bg-slate-50/50 p-5 rounded-3xl border border-slate-100 flex items-center gap-4 hover:bg-white hover:shadow-sm transition-all">
-          <div class="w-2 h-2 bg-[#00A3FF] rounded-full shadow-sm shadow-blue-200"></div>
-          ${escapeHtml(item)}
-        </div>
-      `).join("");
-    }
+    async function callChef(mode){
+      hideAlert();
+      clearOutput();
 
-    function renderTips(list) {
-      els.tipsWrap.innerHTML = (list || []).map((tip, i) => `
-        <div class="bg-white/5 p-6 rounded-[2rem] border border-white/5 flex gap-5 hover:bg-white/10 transition-all">
-          <span class="text-cyan-400 font-black text-xl italic">${i + 1}</span>
-          <p class="text-sm font-medium leading-relaxed opacity-90">${escapeHtml(tip)}</p>
-        </div>
-      `).join("");
-    }
+      const targets = currentTargets();
+      const numMeals = clampNum(parseInt(mealsEl.value, 10), 3, 5);
+      const filter = (filterEl.value || "").trim();
+      const fridge = (fridgeEl.value || "").trim();
 
-    function renderPlan(plan) {
-      if (!plan?.days?.[0]?.meals?.length) {
-        els.resultsSection.classList.add("hidden");
+      if(mode === "fridge" && fridge.length < 3){
+        showAlert("Falta la nevera", "Escribe al menos 2–3 ingredientes para poder cocinar con lo que tienes.");
         return;
       }
 
-      els.planName.textContent = plan.plan_name || "Plan Chef-";
-      renderMeals(plan.days[0].meals);
-      renderShopping(plan.shopping_list || []);
-      renderTips(plan.general_tips || []);
-
-      els.resultsSection.classList.remove("hidden");
-
-      setTimeout(() => {
-        els.resultsSection.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 250);
-    }
-
-    async function generate(useFridge) {
-      const prefs = {
-        protein: n(els.protein.value),
-        fat: n(els.fat.value),
-        carbs: n(els.carbs.value),
-        numMeals: n(els.numMeals.value),
-        dietaryFilter: String(els.dietaryFilter.value || "").trim(),
-        fridgeIngredients: useFridge ? String(els.fridgeIngredients.value || "").trim() : "",
+      const payload = {
+        mode,
+        targets,
+        numMeals,
+        filter,
+        fridge
       };
-
-      if (prefs.protein <= 0 || prefs.fat <= 0 || prefs.carbs <= 0) {
-        showAlert("Introduce objetivos de macros válidos (mayores que 0).");
-        return;
-      }
 
       setLoading(true);
-      els.alertWrap.classList.add("hidden");
-      els.alertWrap.innerHTML = "";
-      els.resultsSection.classList.add("hidden");
-      els.usageWrap.classList.add("hidden");
+      try{
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 45000);
 
-      try {
-        const res = await fetch(API_ENDPOINT, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(prefs),
+        const res = await fetch("/.netlify/functions/chef", {
+          method:"POST",
+          headers: { "Content-Type":"application/json" },
+          body: JSON.stringify(payload),
+          signal: controller.signal
         });
 
-        const data = await res.json().catch(() => ({}));
+        clearTimeout(t);
 
-        if (!res.ok) {
-          const msg = data?.error || `Error del servidor (${res.status}).`;
-          throw new Error(msg);
+        const data = await res.json().catch(() => null);
+        if(!res.ok || !data || data.ok === false){
+          const msg = data?.error || `Error HTTP ${res.status}`;
+          showAlert("Fallo interno", msg);
+          return;
         }
 
-        state.plan = data.plan;
-        state.usage = data.usage;
+        if(data.usage?.totalTokens != null){
+          chipTokens.style.display = "inline-flex";
+          chipTokens.textContent = `Tokens: ${data.usage.totalTokens}`;
+        }
 
-        renderUsage(state.usage);
-        renderPlan(state.plan);
-
-      } catch (e) {
-        showAlert(e?.message || "Chef- ha tenido un problema de conexión. Reinténtalo.");
-      } finally {
+        renderPlan(data.plan);
+      }catch(e){
+        const msg = (e && e.name === "AbortError")
+          ? "La petición ha tardado demasiado. Prueba otra vez (o baja platos/tamaño de nevera)."
+          : "No se pudo conectar con el servidor. Revisa tu despliegue en Netlify.";
+        showAlert("Error de conexión", msg);
+      }finally{
         setLoading(false);
       }
     }
 
-    // Wire inputs
-    ["input", "change"].forEach((evt) => {
-      els.protein.addEventListener(evt, updateCaloriesUI);
-      els.fat.addEventListener(evt, updateCaloriesUI);
-      els.carbs.addEventListener(evt, updateCaloriesUI);
+    ["input","change"].forEach(ev => {
+      proteinEl.addEventListener(ev, updateCaloriesUI);
+      fatEl.addEventListener(ev, updateCaloriesUI);
+      carbsEl.addEventListener(ev, updateCaloriesUI);
     });
 
-    // Wire buttons
-    els.btnIdeal.addEventListener("click", () => generate(false));
-    els.btnFridge.addEventListener("click", () => generate(true));
+    btnIdeal.addEventListener("click", () => callChef("ideal"));
+    btnFridge.addEventListener("click", () => callChef("fridge"));
 
-    // init
     updateCaloriesUI();
   </script>
 </body>
 </html>
-
